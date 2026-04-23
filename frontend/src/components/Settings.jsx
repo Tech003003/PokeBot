@@ -1,10 +1,23 @@
 import React, { useEffect, useState } from "react";
 import { api } from "@/lib/api";
 import { toast } from "sonner";
+import { Plus, Trash2 } from "lucide-react";
+
+const MODES = [
+  { id: "monitor", label: "Monitor" },
+  { id: "cart", label: "Add to cart" },
+  { id: "checkout", label: "Checkout" },
+  { id: "auto", label: "Full auto" },
+];
 
 export default function Settings() {
   const [s, setS] = useState(null);
+  const [dcStatus, setDcStatus] = useState({ connected: false, running: false });
   useEffect(() => { api.get("/settings").then((r) => setS(r.data)); }, []);
+  useEffect(() => {
+    const t = setInterval(() => api.get("/discord/status").then((r) => setDcStatus(r.data)).catch(()=>{}), 3000);
+    return () => clearInterval(t);
+  }, []);
   if (!s) return <div className="p-6 text-[#52525B]">Loading…</div>;
 
   const save = async (patch) => {
@@ -14,6 +27,17 @@ export default function Settings() {
       toast.success("Saved");
     } catch (e) { toast.error(String(e.message)); }
   };
+
+  const rules = s.discord_channel_rules || {};
+  const setRules = (next) => setS({ ...s, discord_channel_rules: next });
+  const addRule = () => {
+    const cid = prompt("Channel ID to watch (right-click the channel in Discord → Copy Channel ID):");
+    if (!cid || !/^\d{10,25}$/.test(cid.trim())) { toast.error("Not a valid Discord channel ID"); return; }
+    if (rules[cid.trim()]) { toast.info("Already added"); return; }
+    setRules({ ...rules, [cid.trim()]: { action: "monitor", priority: 5, max_price: "", profile_id: "", auto_start: true } });
+  };
+  const updateRule = (cid, patch) => setRules({ ...rules, [cid]: { ...rules[cid], ...patch } });
+  const deleteRule = (cid) => { const n = { ...rules }; delete n[cid]; setRules(n); };
 
   const field = "bg-[#09090b] border border-[#27272a] px-2 py-1.5 text-sm w-full focus:outline-none focus:border-[#007AFF] rounded-none";
 
@@ -40,7 +64,7 @@ export default function Settings() {
       <div>
         <div className="text-xs font-black tracking-[0.2em] uppercase text-[#A1A1AA] mb-3" style={{fontFamily:"'Chivo', sans-serif"}}>Notifications</div>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4 items-start">
-          <label className="md:col-span-3"><div className="text-[10px] text-[#A1A1AA] uppercase mb-1">Discord Webhook URL</div>
+          <label className="md:col-span-3"><div className="text-[10px] text-[#A1A1AA] uppercase mb-1">Discord Webhook URL (for alerts)</div>
             <input className={field} placeholder="https://discord.com/api/webhooks/…" value={s.discord_webhook} onChange={(e) => setS({ ...s, discord_webhook: e.target.value })} data-testid="discord-webhook-input" />
           </label>
           <label className="flex items-center gap-2 text-xs text-[#A1A1AA]"><input type="checkbox" checked={s.sound_alerts} onChange={(e) => setS({ ...s, sound_alerts: e.target.checked })} /> Sound alerts</label>
@@ -62,6 +86,58 @@ export default function Settings() {
           <label><div className="text-[10px] text-[#A1A1AA] uppercase mb-1">Skip Cooldown (sec)</div>
             <input type="number" min={10} className={field} value={s.price_guard_cooldown_s ?? 300} onChange={(e) => setS({ ...s, price_guard_cooldown_s: Number(e.target.value) })} />
           </label>
+        </div>
+      </div>
+
+      <div>
+        <div className="flex items-center justify-between mb-3">
+          <div className="text-xs font-black tracking-[0.2em] uppercase text-[#A1A1AA]" style={{fontFamily:"'Chivo', sans-serif"}}>Discord Auto-Import</div>
+          <div className="flex items-center gap-2 text-[10px] font-mono">
+            <span className={`w-2 h-2 rounded-full ${dcStatus.connected ? "bg-[#00FF66] animate-pulse" : "bg-[#52525B]"}`} />
+            <span className={dcStatus.connected ? "text-[#00FF66]" : "text-[#52525B]"}>
+              {dcStatus.connected ? "BOT ONLINE" : dcStatus.running ? "CONNECTING…" : "OFFLINE"}
+            </span>
+          </div>
+        </div>
+        <div className="text-[11px] text-[#52525B] mb-3 leading-relaxed">
+          Auto-add items to the Watchlist when a Discord bot posts a drop alert in a channel you're watching.
+          <br/>⚠ You cannot add this bot to servers you don't own (e.g. PokePings). Instead: create your own
+          Discord server, invite this bot, and use Discord's <span className="text-[#FFCC00]">"Follow"</span> feature
+          on the source's announcement channels to mirror their alerts into yours.
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 items-start">
+          <label className="md:col-span-2"><div className="text-[10px] text-[#A1A1AA] uppercase mb-1">Bot Token</div>
+            <input type="password" placeholder="MTIzNDU2Nzg5MA.…" className={field} value={s.discord_bot_token || ""} onChange={(e) => setS({ ...s, discord_bot_token: e.target.value })} data-testid="discord-token-input" />
+          </label>
+          <label className="flex items-center gap-2 text-xs text-[#A1A1AA] mt-6">
+            <input type="checkbox" checked={!!s.discord_enabled} onChange={(e) => setS({ ...s, discord_enabled: e.target.checked })} data-testid="discord-enable-toggle" />
+            Enable Discord listener
+          </label>
+        </div>
+
+        <div className="mt-4">
+          <div className="flex items-center justify-between mb-2">
+            <div className="text-[10px] text-[#A1A1AA] uppercase tracking-wider">Channel Rules · {Object.keys(rules).length}</div>
+            <button onClick={addRule} data-testid="add-channel-rule-btn" className="bg-[#007AFF] text-white hover:bg-[#3395FF] px-2 py-1 text-[10px] font-bold uppercase tracking-wider flex items-center gap-1"><Plus size={12}/> Add channel</button>
+          </div>
+          {Object.keys(rules).length === 0 && <div className="text-[11px] text-[#52525B] border border-dashed border-[#27272a] p-3">No channels configured. Add your own server's channel IDs where mirrored drop-alerts land.</div>}
+          <div className="space-y-2">
+            {Object.entries(rules).map(([cid, rule]) => (
+              <div key={cid} className="border border-[#27272a] bg-[#09090b] p-2 grid grid-cols-12 gap-2 items-center" data-testid={`rule-${cid}`}>
+                <div className="col-span-3 font-mono text-[11px] text-[#A1A1AA] truncate" title={cid}>{cid}</div>
+                <select className={`${field} col-span-2`} value={rule.action} onChange={(e) => updateRule(cid, { action: e.target.value })}>
+                  {MODES.map((m) => <option key={m.id} value={m.id}>{m.label}</option>)}
+                </select>
+                <input type="number" min={1} max={10} className={`${field} col-span-1`} placeholder="Pri" value={rule.priority ?? 5} onChange={(e) => updateRule(cid, { priority: Number(e.target.value) })} />
+                <input type="number" step="0.01" className={`${field} col-span-2`} placeholder="Max $" value={rule.max_price ?? ""} onChange={(e) => updateRule(cid, { max_price: e.target.value === "" ? null : Number(e.target.value) })} />
+                <label className="col-span-3 flex items-center gap-1 text-[11px] text-[#A1A1AA]">
+                  <input type="checkbox" checked={rule.auto_start ?? true} onChange={(e) => updateRule(cid, { auto_start: e.target.checked })} /> auto-start
+                </label>
+                <button onClick={() => deleteRule(cid)} className="col-span-1 text-[#FF3B30] p-1 hover:bg-[#FF3B30]/10 flex justify-center"><Trash2 size={13}/></button>
+              </div>
+            ))}
+          </div>
         </div>
       </div>
 

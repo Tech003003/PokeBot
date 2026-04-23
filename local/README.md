@@ -37,11 +37,66 @@ release (takes ~8 minutes). You can also go to the **Actions** tab → **Build W
 
 ---
 
-## 🛠 ALTERNATIVE — build from source (for developers)
+---
 
-The rest of this guide is for people who want to run NexusBot from the source code
-directly (so they can modify it, add sites, tweak selectors, etc.). If you grabbed the
-.exe above, you can skip to [Section 8 — Dashboard tour](#8-dashboard-tour) for usage.
+## 🤖 Bonus — Auto-import drops from a public drop-alert Discord (PokePings, etc.)
+
+NexusBot can listen to a Discord channel and **auto-add any retailer URL it sees to your
+Watchlist** — optionally auto-starting the watcher in cart/checkout/auto mode. This lets
+you piggyback on public drop-alert services like PokePings.
+
+### ⚠ Important: you cannot add bots to servers you don't own
+
+PokePings (and most public drop-alert services) won't let you add your own bot to their
+server. The legit workaround, built into Discord itself:
+
+1. **Create your own Discord server** (free, takes 10 seconds — click the `+` in your
+   server list → Create My Own → For me and my friends).
+2. **Create a bot** at [discord.com/developers/applications](https://discord.com/developers/applications):
+   - Click **New Application** → name it "NexusBot" → **Bot** tab → **Reset Token** → Copy.
+   - Under **Privileged Gateway Intents**, enable **MESSAGE CONTENT INTENT**.
+   - **OAuth2 → URL Generator** → scopes: `bot`. Permissions: `View Channels`,
+     `Read Message History`, `Add Reactions`. Copy the URL, open it, invite the bot to
+     **your** server.
+3. **"Follow" PokePings' channels into yours:**
+   - In your own server, create a channel called `#drops` (or one per retailer).
+   - Go to PokePings' server and open one of the alert channels (like the Target one).
+     **If it has the megaphone/Announcement icon next to the channel name**, click the
+     **"Follow"** button at the top and pick the channel in your server to mirror into.
+   - Discord will now automatically repost every PokePings alert into your own channel,
+     where your bot can read it. This is 100% Discord ToS compliant.
+   - If PokePings' channels are NOT Announcement channels (no Follow button), the only
+     other legit options are: (a) use their official webhook/API if offered, or (b) ask
+     their admins to convert the channels. Self-botting with your user token is
+     ToS-violating and will get your account banned — NexusBot refuses to do that.
+4. **Configure the listener in NexusBot:**
+   - Dashboard → **Settings** tab → **Discord Auto-Import** section.
+   - Paste your bot's token.
+   - Check **Enable Discord listener**.
+   - Click **+ Add channel** and paste the ID of your mirror channel (right-click the
+     channel in Discord → Copy Channel ID; enable Developer Mode in Settings → Advanced
+     if you don't see that).
+   - For each channel, pick:
+     - **Action** — what to do when an alert arrives (`monitor` = just add; `cart` = add
+       & auto-start in cart mode; etc.).
+     - **Priority** (1–10).
+     - **Max $** — optional ceiling; combined with the Price Guard, skips purchases on
+       overpriced drops.
+     - **auto-start** — whether to start the watcher immediately after adding.
+   - Click **Save Settings**. The bot connects and the status dot turns green.
+
+### What gets parsed
+
+For each new message in a configured channel, the bot extracts:
+- The **retailer URL** (matched against Walmart / Pokémon Center / Amazon / Target /
+  Best Buy / GameStop / Costco / Sam's Club / TCGPlayer domains)
+- The **product name** (from embed title, or first line of embed description if the
+  title is just "Restocked" / "In Stock")
+- The **price** (from a field labeled "Price", or the first `$XX.XX` found anywhere)
+
+Duplicate URLs are de-duplicated within a session, and any URL already in your Watchlist
+is reused instead of re-added. The bot reacts with 🎯 in the source channel so you can
+tell at a glance which alerts it picked up.
 
 ---
 

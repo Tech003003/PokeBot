@@ -13,6 +13,7 @@ from playwright.async_api import async_playwright
 
 import db
 import sites
+from discord_listener import DiscordListener
 
 # --- Purchase modes ---------------------------------------------------------
 PURCHASE_MODES = ("monitor", "cart", "checkout", "auto")
@@ -67,6 +68,7 @@ class MonitorEngine:
         self.drop_tasks: dict[str, asyncio.Task] = {}
         self.logs = LogBus()
         self._connect_lock = asyncio.Lock()
+        self.discord = DiscordListener(self)
 
     # ------- logging helpers -------
     def log(self, level: str, msg: str, meta: Optional[dict] = None):
@@ -115,6 +117,7 @@ class MonitorEngine:
             "running": self.running,
             "active_workers": list(self.workers.keys()),
             "active_drops": list(self.drop_tasks.keys()),
+            "discord_connected": self.discord.connected,
         }
 
     async def _ensure_context(self):

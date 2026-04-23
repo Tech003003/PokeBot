@@ -1,6 +1,4 @@
-"""NexusBot Command Center — FastAPI backend.
-Local desktop web dashboard for Pokémon TCG / hot-item scalper & auto-purchase bot.
-"""
+"""NexusBot Command Center — FastAPI backend."""
 from __future__ import annotations
 import asyncio
 import json
@@ -12,7 +10,7 @@ from typing import Optional
 
 from dotenv import load_dotenv
 from fastapi import APIRouter, FastAPI, HTTPException, WebSocket, WebSocketDisconnect
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
 from starlette.middleware.cors import CORSMiddleware
 
 import db
@@ -30,8 +28,15 @@ logger = logging.getLogger("nexusbot")
 async def lifespan(_: FastAPI):
     await db.init_db()
     logger.info("NexusBot backend started")
+    try:
+        s = await db.get_all_settings()
+        if s.get("discord_enabled") and s.get("discord_bot_token"):
+            await engine.discord.start(s["discord_bot_token"])
+    except Exception as e:
+        logger.warning(f"Discord auto-start failed: {e}")
     yield
     try:
+        await engine.discord.stop()
         await engine.stop_all()
         await engine.disconnect_brave()
     except Exception:
@@ -89,7 +94,7 @@ class ProfileIn(BaseModel):
 class DropIn(BaseModel):
     name: str
     site: str
-    run_at: str  # ISO
+    run_at: str
     urls: list[str]
     queue_handling: bool = True
     blast_mode: bool = True
@@ -111,10 +116,31 @@ class SettingsPatch(BaseModel):
     enforce_max_price: Optional[bool] = None
     strict_price_guard: Optional[bool] = None
     price_guard_cooldown_s: Optional[int] = None
+    discord_enabled: Optional[bool] = None
+    discord_bot_token: Optional[str] = None
+    discord_channel_rules: Optional[dict] = None
 
 
 class ConnectIn(BaseModel):
     cdp_url: Optional[str] = None
+
+
+# ------ Helpers ------
+def _bool_fix(d: dict) -> dict:
+    for k, v in list(d.items()):
+        if isinstance(v, bool):
+            d[k] = 1 if v else 0
+    return d
+
+
+def _mask_profile(p: dict) -> dict:
+    p = dict(p)
+    if p.get("card_number"):
+        n = p["card_number"]
+        p["card_number"] = ("•" * max(0, len(n) - 4)) + n[-4:] if len(n) > 4 else ""
+    if p.get("card_cvv"):
+        p["card_cvv"] = "•••"
+    return p
 
 
 # ------ Meta / health ------
@@ -130,7 +156,7 @@ async def meta_sites():
 
 @api.get("/meta/modes")
 async def meta_modes():
-    return {"modes": list(["monitor", "cart", "checkout", "auto"])}
+    return {"modes": ["monitor", "cart", "checkout", "auto"]}
 
 
 # ------ Status ------
@@ -141,7 +167,7 @@ async def get_status():
     return s
 
 
-# ------ Brave connection ------
+# ------ Brave ------
 @api.post("/brave/connect")
 async def brave_connect(body: ConnectIn):
     if body.cdp_url:
@@ -227,7 +253,6 @@ async def profile_create(body: ProfileIn):
 
 @api.patch("/profiles/{pid}")
 async def profile_update(pid: str, body: ProfileIn):
-    # Only update non-empty fields (skip masked placeholders)
     patch = {k: v for k, v in body.model_dump().items() if v not in ("", None) and not str(v).startswith("••")}
     p = await db.update_profile(pid, patch)
     if not p:
@@ -238,7 +263,8 @@ async def profile_update(pid: str, body: ProfileIn):
 @api.delete("/profiles/{pid}")
 async def profile_delete(pid: str):
     ok = await db.delete_profile(pid)
-    if not ok: raise HTTPException(404)
+    if not ok:
+        raise HTTPException(404)
     return {"ok": True}
 
 
@@ -248,8 +274,10 @@ async def drops_list():
     rows = await db.list_drops()
     for r in rows:
         if isinstance(r.get("urls"), str):
-            try: r["urls"] = json.loads(r["urls"])
-            except Exception: r["urls"] = [r["urls"]]
+            try:
+                r["urls"] = json.loads(r["urls"])
+            except Exception:
+                r["urls"] = [r["urls"]]
     return rows
 
 
@@ -259,8 +287,10 @@ async def drops_create(body: DropIn):
         raise HTTPException(400, f"Unknown site '{body.site}'")
     d = await db.create_drop(_bool_fix(body.model_dump()))
     if isinstance(d.get("urls"), str):
-        try: d["urls"] = json.loads(d["urls"])
-        except Exception: pass
+        try:
+            d["urls"] = json.loads(d["urls"])
+        except Exception:
+            pass
     return d
 
 
@@ -268,7 +298,8 @@ async def drops_create(body: DropIn):
 async def drops_delete(did: str):
     await engine.cancel_drop(did)
     ok = await db.delete_drop(did)
-    if not ok: raise HTTPException(404)
+    if not ok:
+        raise HTTPException(404)
     return {"ok": True}
 
 
@@ -298,7 +329,44 @@ async def settings_get():
 async def settings_patch(body: SettingsPatch):
     patch = {k: v for k, v in body.model_dump().items() if v is not None}
     await db.update_settings(patch)
-    return await db.get_all_settings()
+    new_settings = await db.get_all_settings()
+    if "discord_enabled" in patch or "discord_bot_token" in patch:
+        want_on = bool(new_settings.get("discord_enabled")) and bool(new_settings.get("discord_bot_token"))
+        is_on = engine.discord.task is not None and not engine.discord.task.done()
+        try:
+            if want_on and not is_on:
+                await engine.discord.start(new_settings["discord_bot_token"])
+            elif not want_on and is_on:
+                await engine.discord.stop()
+            elif want_on and is_on and "discord_bot_token" in patch:
+                await engine.discord.stop()
+                await engine.discord.start(new_settings["discord_bot_token"])
+        except Exception as e:
+            logger.warning(f"Discord reconfigure failed: {e}")
+    return new_settings
+
+
+# ------ Discord ------
+@api.get("/discord/status")
+async def discord_status():
+    return {
+        "connected": engine.discord.connected,
+        "running": engine.discord.task is not None and not engine.discord.task.done(),
+    }
+
+
+@api.post("/discord/start")
+async def discord_start():
+    s = await db.get_all_settings()
+    token = s.get("discord_bot_token") or ""
+    if not token:
+        raise HTTPException(400, "No bot token configured")
+    return await engine.discord.start(token)
+
+
+@api.post("/discord/stop")
+async def discord_stop():
+    return await engine.discord.stop()
 
 
 # ------ Websocket logs ------
@@ -312,7 +380,6 @@ async def ws_logs(ws: WebSocket):
                 entry = await asyncio.wait_for(q.get(), timeout=15)
                 await ws.send_json(entry)
             except asyncio.TimeoutError:
-                # heartbeat
                 await ws.send_json({"level": "PING", "msg": "pong", "ts": ""})
     except WebSocketDisconnect:
         pass
@@ -320,25 +387,6 @@ async def ws_logs(ws: WebSocket):
         pass
     finally:
         engine.logs.unsubscribe(q)
-
-
-# ------ Helpers ------
-def _bool_fix(d: dict) -> dict:
-    # SQLite stores bools as ints
-    for k, v in list(d.items()):
-        if isinstance(v, bool):
-            d[k] = 1 if v else 0
-    return d
-
-
-def _mask_profile(p: dict) -> dict:
-    p = dict(p)
-    if p.get("card_number"):
-        n = p["card_number"]
-        p["card_number"] = ("•" * max(0, len(n) - 4)) + n[-4:] if len(n) > 4 else ""
-    if p.get("card_cvv"):
-        p["card_cvv"] = "•••"
-    return p
 
 
 app.include_router(api)

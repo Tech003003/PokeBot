@@ -87,6 +87,9 @@ DEFAULT_SETTINGS = {
     "enforce_max_price": True,         # price guard: skip purchase if live price > max_price
     "strict_price_guard": False,       # if true, skip purchase when price can't be read
     "price_guard_cooldown_s": 300,     # seconds to wait after a price-guard skip
+    "discord_enabled": False,
+    "discord_bot_token": "",
+    "discord_channel_rules": {},       # { channel_id: {action, priority, max_price, profile_id, auto_start} }
 }
 
 
