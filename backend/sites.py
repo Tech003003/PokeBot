@@ -1,4 +1,4 @@
-"""Per-site selector + flow logic for NexusBot. 9 retailers supported.
+"""Per-site selector + flow logic for TechBot. 9 retailers supported.
 
 Each site module exposes:
     SELECTORS: list of CSS/Playwright selectors to detect "add to cart" state

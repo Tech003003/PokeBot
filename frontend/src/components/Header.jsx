@@ -3,6 +3,26 @@ import { api } from "@/lib/api";
 import { toast } from "sonner";
 import { Plug, Unplug, Power, PowerOff, Rocket } from "lucide-react";
 
+function LogoMark() {
+  const [failed, setFailed] = useState(false);
+  if (failed) {
+    return (
+      <div className="w-8 h-8 bg-[#00FF66] flex items-center justify-center">
+        <Rocket size={18} className="text-black" />
+      </div>
+    );
+  }
+  return (
+    <img
+      src="/logo.png"
+      alt="TechBot"
+      className="w-8 h-8 object-contain"
+      onError={() => setFailed(true)}
+      data-testid="app-logo"
+    />
+  );
+}
+
 export default function Header({ status, refresh }) {
   const [cdp, setCdp] = useState(status?.settings?.cdp_url || "http://127.0.0.1:9222");
 
@@ -46,12 +66,10 @@ export default function Header({ status, refresh }) {
     >
       <div className="max-w-[1600px] mx-auto flex items-center gap-6 flex-wrap">
         <div className="flex items-center gap-3">
-          <div className="w-8 h-8 bg-[#00FF66] flex items-center justify-center">
-            <Rocket size={18} className="text-black" />
-          </div>
+          <LogoMark />
           <div>
             <div className="font-black tracking-[0.15em] text-sm uppercase" style={{fontFamily:"'Chivo', sans-serif"}}>
-              NexusBot
+              TechBot
             </div>
             <div className="text-[10px] text-[#52525B] tracking-[0.2em] uppercase -mt-0.5">Command Center</div>
           </div>

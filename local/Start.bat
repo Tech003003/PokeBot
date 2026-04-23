@@ -1,5 +1,5 @@
 @echo off
-title NexusBot Command Center
+title TechBot Command Center
 setlocal
 
 cd /d "%~dp0"
@@ -7,7 +7,7 @@ cd ..
 
 echo.
 echo ==========================================
-echo   NexusBot Command Center - First-time setup
+echo   TechBot Command Center - First-time setup
 echo ==========================================
 echo.
 

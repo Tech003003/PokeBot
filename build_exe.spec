@@ -1,6 +1,6 @@
-# PyInstaller spec for NexusBot Windows .exe build.
+# PyInstaller spec for TechBot Windows .exe build.
 # Used by .github/workflows/build.yml on windows-latest runners.
-# Produces dist/NexusBot/NexusBot.exe + supporting files.
+# Produces dist/TechBot/TechBot.exe + supporting files.
 
 from PyInstaller.utils.hooks import collect_all, collect_submodules
 
@@ -56,7 +56,7 @@ exe = EXE(
     a.scripts,
     [],
     exclude_binaries=True,
-    name="NexusBot",
+    name="TechBot",
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
@@ -77,5 +77,5 @@ coll = COLLECT(
     strip=False,
     upx=False,
     upx_exclude=[],
-    name="NexusBot",
+    name="TechBot",
 )

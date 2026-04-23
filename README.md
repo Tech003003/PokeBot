@@ -1,4 +1,4 @@
-# NexusBot Command Center — Complete User Guide (No Coding Required)
+# TechBot Command Center — Complete User Guide (No Coding Required)
 
 A local Pokémon / hot-item scalper dashboard with optional auto-purchase. Everything
 runs on **your own PC** — your logins, shipping address, and payment info never leave
@@ -13,9 +13,9 @@ If you just want to run the app without installing Python, Node.js, or anything 
 1. Install **[Brave browser](https://brave.com/download)** (the bot drives your Brave window).
 2. Go to your repo's **Releases** page on GitHub:
    `https://github.com/<your-username>/<your-repo>/releases/latest`
-3. Download **`NexusBot-windows.zip`** under **Assets**.
+3. Download **`TechBot-windows.zip`** under **Assets**.
 4. Right-click the ZIP → **Extract All…** → pick anywhere (Desktop is fine).
-5. Open the extracted folder, double-click **`NexusBot.exe`**.
+5. Open the extracted folder, double-click **`TechBot.exe`**.
 6. The dashboard opens automatically at **http://127.0.0.1:8787**.
 7. Double-click **`Start-Brave.bat`** (also in the folder) to open Brave with the debug port,
    log into your retailer accounts once, then click **CONNECT BRAVE** on the dashboard.
@@ -41,7 +41,7 @@ release (takes ~8 minutes). You can also go to the **Actions** tab → **Build W
 
 ## 🤖 Bonus — Auto-import drops from a public drop-alert Discord (PokePings, etc.)
 
-NexusBot can listen to a Discord channel and **auto-add any retailer URL it sees to your
+TechBot can listen to a Discord channel and **auto-add any retailer URL it sees to your
 Watchlist** — optionally auto-starting the watcher in cart/checkout/auto mode. This lets
 you piggyback on public drop-alert services like PokePings.
 
@@ -53,7 +53,7 @@ server. The legit workaround, built into Discord itself:
 1. **Create your own Discord server** (free, takes 10 seconds — click the `+` in your
    server list → Create My Own → For me and my friends).
 2. **Create a bot** at [discord.com/developers/applications](https://discord.com/developers/applications):
-   - Click **New Application** → name it "NexusBot" → **Bot** tab → **Reset Token** → Copy.
+   - Click **New Application** → name it "TechBot" → **Bot** tab → **Reset Token** → Copy.
    - Under **Privileged Gateway Intents**, enable **MESSAGE CONTENT INTENT**.
    - **OAuth2 → URL Generator** → scopes: `bot`. Permissions: `View Channels`,
      `Read Message History`, `Add Reactions`. Copy the URL, open it, invite the bot to
@@ -68,8 +68,8 @@ server. The legit workaround, built into Discord itself:
    - If PokePings' channels are NOT Announcement channels (no Follow button), the only
      other legit options are: (a) use their official webhook/API if offered, or (b) ask
      their admins to convert the channels. Self-botting with your user token is
-     ToS-violating and will get your account banned — NexusBot refuses to do that.
-4. **Configure the listener in NexusBot:**
+     ToS-violating and will get your account banned — TechBot refuses to do that.
+4. **Configure the listener in TechBot:**
    - Dashboard → **Settings** tab → **Discord Auto-Import** section.
    - Paste your bot's token.
    - Check **Enable Discord listener**.
@@ -141,12 +141,12 @@ After the one-time setup, you'll never type a command again — just double-clic
 2. Open the GitHub repo Emergent created.
 3. Click the green **"Code"** button → **"Download ZIP"**.
 4. Find the ZIP in your Downloads, right-click → **"Extract All…"** → pick Desktop.
-5. Rename the extracted folder to **`NexusBot`**.
+5. Rename the extracted folder to **`TechBot`**.
 
 ### Option B — `git clone`
 
 ```
-git clone https://github.com/<you>/<repo>.git NexusBot
+git clone https://github.com/<you>/<repo>.git TechBot
 ```
 
 ---
@@ -186,7 +186,7 @@ uninstall Python from Add/Remove Programs and reinstall with the PATH box ticked
 
 ## 6. First-time setup (one click)
 
-1. Open the **`NexusBot`** folder → open the **`local`** folder.
+1. Open the **`TechBot`** folder → open the **`local`** folder.
 2. Double-click **`Start.bat`**.
 3. A black window opens and shows:
    ```
@@ -224,7 +224,7 @@ Brave window.
 Six tabs along the top, under the header.
 
 **Header** (always visible):
-- NexusBot logo (left)
+- TechBot logo (left)
 - Brave CDP URL field + **CONNECT BRAVE** button (orange = ready to connect, solid = live)
 - **START ALL** (green) — runs every active watcher
 - **STOP ALL** (red) — kill switch; stops every watcher and every drop
@@ -328,14 +328,14 @@ In **Profiles → + Add**:
 | Email / Phone         | Some retailers ask for these on guest checkout.                     |
 | Address 1 / 2 / City / State / ZIP | Standard US shipping address.                            |
 | Name on Card          | Cardholder name as printed on the card.                             |
-| Card #                | Your credit/debit card number. Stored **unencrypted in a local file** on your PC (`nexusbot.db`). |
+| Card #                | Your credit/debit card number. Stored **unencrypted in a local file** on your PC (`techbot.db`). |
 | MM / YY               | Expiration month (1–12) / year (2-digit).                           |
 | CVV                   | 3–4 digit security code. Stored locally.                            |
 
 **Security notes:**
 - Card data stays in the SQLite file next to the app. Nothing is uploaded.
 - When listed in the dashboard, card numbers show only the last 4 digits and CVV is masked.
-- If you uninstall or lose the app, back up `nexusbot.db` first or you'll lose stored cards.
+- If you uninstall or lose the app, back up `techbot.db` first or you'll lose stored cards.
 - Setting up saved payment methods **inside each retailer's account** is safer — the bot
   doesn't need your card that way.
 
@@ -422,13 +422,13 @@ to `_PRICE_SELECTORS` for that site. Or turn off **Strict** mode to proceed anyw
 
 **Dashboard won't open / port already in use**
 → Close the other program using port 8787, or edit `local/launch.py` and change
-`NEXUSBOT_PORT` to something else like `8888`.
+`TECHBOT_PORT` to something else like `8888`.
 
 **I want to reset everything**
-→ Close the app, delete `nexusbot.db`, relaunch. Fresh start.
+→ Close the app, delete `techbot.db`, relaunch. Fresh start.
 
 **I want to back up my watches / profiles**
-→ Copy the `nexusbot.db` file somewhere safe. Restore by dropping it back in.
+→ Copy the `techbot.db` file somewhere safe. Restore by dropping it back in.
 
 ---
 

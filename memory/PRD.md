@@ -1,4 +1,4 @@
-# NexusBot Command Center — PRD
+# TechBot Command Center — PRD
 
 ## Original problem statement
 Rebuild an existing Python/NiceGUI Pokémon scalper (bot.py + Main.py) into an

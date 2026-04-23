@@ -10,7 +10,7 @@ if not exist "%BRAVE%" (
     pause & exit /b 1
 )
 
-set "PROFILE=%USERPROFILE%\Desktop\NexusBotBraveSession"
+set "PROFILE=%USERPROFILE%\Desktop\TechBotBraveSession"
 if not exist "%PROFILE%" mkdir "%PROFILE%"
 
 echo Starting Brave with --remote-debugging-port=9222

@@ -54,32 +54,32 @@ jobs:
       - name: Copy README + Start-Brave helper into build
         shell: pwsh
         run: |
-          Copy-Item README.md dist/NexusBot/README.md
-          Copy-Item local/Start-Brave.bat dist/NexusBot/Start-Brave.bat
-          Copy-Item local/README.md dist/NexusBot/Detailed-Guide.md -ErrorAction SilentlyContinue
+          Copy-Item README.md dist/TechBot/README.md
+          Copy-Item local/Start-Brave.bat dist/TechBot/Start-Brave.bat
+          Copy-Item local/README.md dist/TechBot/Detailed-Guide.md -ErrorAction SilentlyContinue
 
       - name: Zip the build
         shell: pwsh
-        run: Compress-Archive -Path dist/NexusBot/* -DestinationPath NexusBot-windows.zip -Force
+        run: Compress-Archive -Path dist/TechBot/* -DestinationPath TechBot-windows.zip -Force
 
       - name: Upload build artifact (every run)
         uses: actions/upload-artifact@v4
         with:
-          name: NexusBot-windows
-          path: NexusBot-windows.zip
+          name: TechBot-windows
+          path: TechBot-windows.zip
           retention-days: 30
 
       - name: Create GitHub Release (only on version tag)
         if: startsWith(github.ref, 'refs/tags/v')
         uses: softprops/action-gh-release@v2
         with:
-          files: NexusBot-windows.zip
+          files: TechBot-windows.zip
           generate_release_notes: true
           body: |
-            ## NexusBot ${{ github.ref_name }}
+            ## TechBot ${{ github.ref_name }}
 
-            **Windows users:** download `NexusBot-windows.zip` below, extract it anywhere,
-            and double-click `NexusBot.exe`. No Python, Node, or any dev tools required —
+            **Windows users:** download `TechBot-windows.zip` below, extract it anywhere,
+            and double-click `TechBot.exe`. No Python, Node, or any dev tools required —
             just install [Brave browser](https://brave.com/download) first.
 
             See `README.md` inside the ZIP for full setup instructions.

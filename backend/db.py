@@ -1,4 +1,4 @@
-"""SQLite-backed storage for NexusBot. Portable for local desktop deployment."""
+"""SQLite-backed storage for TechBot. Portable for local desktop deployment."""
 import aiosqlite
 import json
 import os
@@ -7,7 +7,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Optional
 
-DB_PATH = os.environ.get("NEXUSBOT_DB", str(Path(__file__).parent / "nexusbot.db"))
+DB_PATH = os.environ.get("TECHBOT_DB", str(Path(__file__).parent / "techbot.db"))
 
 
 def _now() -> str:

@@ -1,8 +1,8 @@
-"""Local launcher for NexusBot.
+"""Local launcher for TechBot.
 
 Works in two modes:
   • Dev mode: run directly with `python local/launch.py`. Reads code from /app.
-  • Frozen mode: run as a PyInstaller-built NexusBot.exe. Reads bundled resources
+  • Frozen mode: run as a PyInstaller-built TechBot.exe. Reads bundled resources
     from sys._MEIPASS and stores the SQLite DB next to the .exe.
 
 Starts FastAPI + serves the pre-built React frontend + auto-opens your browser.
@@ -24,12 +24,12 @@ if FROZEN:
     # Playwright needs to find its bundled chromium
     os.environ.setdefault("PLAYWRIGHT_BROWSERS_PATH", str(BUNDLE / "ms-playwright"))
     # Persistent DB lives beside the .exe so it survives app updates
-    os.environ.setdefault("NEXUSBOT_DB", str(EXE_DIR / "nexusbot.db"))
+    os.environ.setdefault("TECHBOT_DB", str(EXE_DIR / "techbot.db"))
 else:
     ROOT = Path(__file__).resolve().parent.parent
     BACKEND_DIR = ROOT / "backend"
     FRONTEND_BUILD = ROOT / "frontend" / "build"
-    os.environ.setdefault("NEXUSBOT_DB", str(ROOT / "nexusbot.db"))
+    os.environ.setdefault("TECHBOT_DB", str(ROOT / "techbot.db"))
 
 os.environ.setdefault("CORS_ORIGINS", "*")
 sys.path.insert(0, str(BACKEND_DIR))
@@ -70,8 +70,8 @@ def _open_browser(url: str, delay: float = 1.2):
 
 
 if __name__ == "__main__":
-    port = int(os.environ.get("NEXUSBOT_PORT", 8787))
+    port = int(os.environ.get("TECHBOT_PORT", 8787))
     url = f"http://127.0.0.1:{port}"
-    print(f"\n  NexusBot Command Center → {url}\n  (This window must stay open while the app runs)\n")
+    print(f"\n  TechBot Command Center → {url}\n  (This window must stay open while the app runs)\n")
     _open_browser(url)
     uvicorn.run(app, host="127.0.0.1", port=port, log_level="warning")

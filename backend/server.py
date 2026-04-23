@@ -1,4 +1,4 @@
-"""NexusBot Command Center — FastAPI backend."""
+"""TechBot Command Center — FastAPI backend."""
 from __future__ import annotations
 import asyncio
 import json
@@ -21,13 +21,13 @@ ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / ".env")
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
-logger = logging.getLogger("nexusbot")
+logger = logging.getLogger("techbot")
 
 
 @asynccontextmanager
 async def lifespan(_: FastAPI):
     await db.init_db()
-    logger.info("NexusBot backend started")
+    logger.info("TechBot backend started")
     try:
         s = await db.get_all_settings()
         if s.get("discord_enabled") and s.get("discord_bot_token"):
@@ -43,7 +43,7 @@ async def lifespan(_: FastAPI):
         pass
 
 
-app = FastAPI(title="NexusBot Command Center", lifespan=lifespan)
+app = FastAPI(title="TechBot Command Center", lifespan=lifespan)
 api = APIRouter(prefix="/api")
 
 
@@ -146,7 +146,7 @@ def _mask_profile(p: dict) -> dict:
 # ------ Meta / health ------
 @api.get("/")
 async def root():
-    return {"app": "NexusBot Command Center", "ok": True}
+    return {"app": "TechBot Command Center", "ok": True}
 
 
 @api.get("/meta/sites")

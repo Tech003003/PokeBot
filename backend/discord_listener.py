@@ -1,4 +1,4 @@
-"""Discord message listener for NexusBot.
+"""Discord message listener for TechBot.
 
 Listens to messages in user-configured channels (in the USER'S OWN Discord server,
 typically populated via Discord's 'Follow' feature from public drop-alert channels),
