@@ -1,89 +1,349 @@
-from fastapi import FastAPI, APIRouter
-from dotenv import load_dotenv
-from starlette.middleware.cors import CORSMiddleware
-from motor.motor_asyncio import AsyncIOMotorClient
-import os
+"""NexusBot Command Center — FastAPI backend.
+Local desktop web dashboard for Pokémon TCG / hot-item scalper & auto-purchase bot.
+"""
+from __future__ import annotations
+import asyncio
+import json
 import logging
+import os
+from contextlib import asynccontextmanager
 from pathlib import Path
-from pydantic import BaseModel, Field, ConfigDict
-from typing import List
-import uuid
-from datetime import datetime, timezone
+from typing import Optional
 
+from dotenv import load_dotenv
+from fastapi import APIRouter, FastAPI, HTTPException, WebSocket, WebSocketDisconnect
+from pydantic import BaseModel, Field
+from starlette.middleware.cors import CORSMiddleware
+
+import db
+import sites as sitelib
+from engine import engine
 
 ROOT_DIR = Path(__file__).parent
-load_dotenv(ROOT_DIR / '.env')
+load_dotenv(ROOT_DIR / ".env")
 
-# MongoDB connection
-mongo_url = os.environ['MONGO_URL']
-client = AsyncIOMotorClient(mongo_url)
-db = client[os.environ['DB_NAME']]
-
-# Create the main app without a prefix
-app = FastAPI()
-
-# Create a router with the /api prefix
-api_router = APIRouter(prefix="/api")
+logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
+logger = logging.getLogger("nexusbot")
 
 
-# Define Models
-class StatusCheck(BaseModel):
-    model_config = ConfigDict(extra="ignore")  # Ignore MongoDB's _id field
-    
-    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
-    client_name: str
-    timestamp: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+@asynccontextmanager
+async def lifespan(_: FastAPI):
+    await db.init_db()
+    logger.info("NexusBot backend started")
+    yield
+    try:
+        await engine.stop_all()
+        await engine.disconnect_brave()
+    except Exception:
+        pass
 
-class StatusCheckCreate(BaseModel):
-    client_name: str
 
-# Add your routes to the router instead of directly to app
-@api_router.get("/")
+app = FastAPI(title="NexusBot Command Center", lifespan=lifespan)
+api = APIRouter(prefix="/api")
+
+
+# ------ Pydantic schemas ------
+class WatchIn(BaseModel):
+    name: str
+    site: str
+    url: str
+    purchase_mode: str = "monitor"
+    priority: int = 5
+    active: bool = True
+    max_price: Optional[float] = None
+    quantity: int = 1
+    profile_id: Optional[str] = None
+
+
+class WatchPatch(BaseModel):
+    name: Optional[str] = None
+    site: Optional[str] = None
+    url: Optional[str] = None
+    purchase_mode: Optional[str] = None
+    priority: Optional[int] = None
+    active: Optional[bool] = None
+    max_price: Optional[float] = None
+    quantity: Optional[int] = None
+    profile_id: Optional[str] = None
+
+
+class ProfileIn(BaseModel):
+    label: str
+    first_name: str = ""
+    last_name: str = ""
+    email: str = ""
+    phone: str = ""
+    address1: str = ""
+    address2: str = ""
+    city: str = ""
+    state: str = ""
+    zip: str = ""
+    country: str = "US"
+    card_name: str = ""
+    card_number: str = ""
+    card_exp_month: str = ""
+    card_exp_year: str = ""
+    card_cvv: str = ""
+
+
+class DropIn(BaseModel):
+    name: str
+    site: str
+    run_at: str  # ISO
+    urls: list[str]
+    queue_handling: bool = True
+    blast_mode: bool = True
+    purchase_mode: str = "cart"
+    profile_id: Optional[str] = None
+
+
+class SettingsPatch(BaseModel):
+    poll_interval_ms: Optional[int] = None
+    concurrent_workers: Optional[int] = None
+    jitter_ms: Optional[int] = None
+    cdp_url: Optional[str] = None
+    discord_webhook: Optional[str] = None
+    sound_alerts: Optional[bool] = None
+    desktop_toasts: Optional[bool] = None
+    headless_fallback: Optional[bool] = None
+    auto_refresh_on_error: Optional[bool] = None
+    stop_before_place_order: Optional[bool] = None
+
+
+class ConnectIn(BaseModel):
+    cdp_url: Optional[str] = None
+
+
+# ------ Meta / health ------
+@api.get("/")
 async def root():
-    return {"message": "Hello World"}
+    return {"app": "NexusBot Command Center", "ok": True}
 
-@api_router.post("/status", response_model=StatusCheck)
-async def create_status_check(input: StatusCheckCreate):
-    status_dict = input.model_dump()
-    status_obj = StatusCheck(**status_dict)
-    
-    # Convert to dict and serialize datetime to ISO string for MongoDB
-    doc = status_obj.model_dump()
-    doc['timestamp'] = doc['timestamp'].isoformat()
-    
-    _ = await db.status_checks.insert_one(doc)
-    return status_obj
 
-@api_router.get("/status", response_model=List[StatusCheck])
-async def get_status_checks():
-    # Exclude MongoDB's _id field from the query results
-    status_checks = await db.status_checks.find({}, {"_id": 0}).to_list(1000)
-    
-    # Convert ISO string timestamps back to datetime objects
-    for check in status_checks:
-        if isinstance(check['timestamp'], str):
-            check['timestamp'] = datetime.fromisoformat(check['timestamp'])
-    
-    return status_checks
+@api.get("/meta/sites")
+async def meta_sites():
+    return {"sites": sitelib.SITES, "labels": sitelib.SITE_LABELS}
 
-# Include the router in the main app
-app.include_router(api_router)
+
+@api.get("/meta/modes")
+async def meta_modes():
+    return {"modes": list(["monitor", "cart", "checkout", "auto"])}
+
+
+# ------ Status ------
+@api.get("/status")
+async def get_status():
+    s = await engine.status()
+    s["settings"] = await db.get_all_settings()
+    return s
+
+
+# ------ Brave connection ------
+@api.post("/brave/connect")
+async def brave_connect(body: ConnectIn):
+    if body.cdp_url:
+        await db.set_setting("cdp_url", body.cdp_url)
+    return await engine.connect_brave(body.cdp_url)
+
+
+@api.post("/brave/disconnect")
+async def brave_disconnect():
+    return await engine.disconnect_brave()
+
+
+# ------ Watchlist ------
+@api.get("/watch")
+async def watch_list():
+    return await db.list_watch()
+
+
+@api.post("/watch")
+async def watch_create(body: WatchIn):
+    if body.site not in sitelib.SITES:
+        raise HTTPException(400, f"Unknown site '{body.site}'")
+    return await db.create_watch(_bool_fix(body.model_dump()))
+
+
+@api.patch("/watch/{wid}")
+async def watch_update(wid: str, body: WatchPatch):
+    patch = {k: v for k, v in body.model_dump().items() if v is not None}
+    patch = _bool_fix(patch)
+    item = await db.update_watch(wid, patch)
+    if not item:
+        raise HTTPException(404, "watch not found")
+    return item
+
+
+@api.delete("/watch/{wid}")
+async def watch_delete(wid: str):
+    await engine.stop_item(wid)
+    ok = await db.delete_watch(wid)
+    if not ok:
+        raise HTTPException(404)
+    return {"ok": True}
+
+
+@api.post("/watch/{wid}/start")
+async def watch_start(wid: str):
+    return await engine.start_item(wid)
+
+
+@api.post("/watch/{wid}/stop")
+async def watch_stop(wid: str):
+    return await engine.stop_item(wid)
+
+
+@api.post("/watch/start-all")
+async def watch_start_all():
+    return await engine.start_all()
+
+
+@api.post("/watch/stop-all")
+async def watch_stop_all():
+    return await engine.stop_all()
+
+
+# ------ Profiles ------
+@api.get("/profiles")
+async def profile_list():
+    return [_mask_profile(p) for p in await db.list_profiles()]
+
+
+@api.get("/profiles/{pid}")
+async def profile_get(pid: str):
+    p = await db.get_profile(pid)
+    if not p:
+        raise HTTPException(404)
+    return _mask_profile(p)
+
+
+@api.post("/profiles")
+async def profile_create(body: ProfileIn):
+    return _mask_profile(await db.create_profile(body.model_dump()))
+
+
+@api.patch("/profiles/{pid}")
+async def profile_update(pid: str, body: ProfileIn):
+    # Only update non-empty fields (skip masked placeholders)
+    patch = {k: v for k, v in body.model_dump().items() if v not in ("", None) and not str(v).startswith("••")}
+    p = await db.update_profile(pid, patch)
+    if not p:
+        raise HTTPException(404)
+    return _mask_profile(p)
+
+
+@api.delete("/profiles/{pid}")
+async def profile_delete(pid: str):
+    ok = await db.delete_profile(pid)
+    if not ok: raise HTTPException(404)
+    return {"ok": True}
+
+
+# ------ Drops ------
+@api.get("/drops")
+async def drops_list():
+    rows = await db.list_drops()
+    for r in rows:
+        if isinstance(r.get("urls"), str):
+            try: r["urls"] = json.loads(r["urls"])
+            except Exception: r["urls"] = [r["urls"]]
+    return rows
+
+
+@api.post("/drops")
+async def drops_create(body: DropIn):
+    if body.site not in sitelib.SITES:
+        raise HTTPException(400, f"Unknown site '{body.site}'")
+    d = await db.create_drop(_bool_fix(body.model_dump()))
+    if isinstance(d.get("urls"), str):
+        try: d["urls"] = json.loads(d["urls"])
+        except Exception: pass
+    return d
+
+
+@api.delete("/drops/{did}")
+async def drops_delete(did: str):
+    await engine.cancel_drop(did)
+    ok = await db.delete_drop(did)
+    if not ok: raise HTTPException(404)
+    return {"ok": True}
+
+
+@api.post("/drops/{did}/arm")
+async def drops_arm(did: str):
+    return await engine.schedule_drop(did)
+
+
+@api.post("/drops/{did}/cancel")
+async def drops_cancel(did: str):
+    return await engine.cancel_drop(did)
+
+
+# ------ History ------
+@api.get("/history")
+async def history():
+    return await db.list_history()
+
+
+# ------ Settings ------
+@api.get("/settings")
+async def settings_get():
+    return await db.get_all_settings()
+
+
+@api.patch("/settings")
+async def settings_patch(body: SettingsPatch):
+    patch = {k: v for k, v in body.model_dump().items() if v is not None}
+    await db.update_settings(patch)
+    return await db.get_all_settings()
+
+
+# ------ Websocket logs ------
+@app.websocket("/api/ws/logs")
+async def ws_logs(ws: WebSocket):
+    await ws.accept()
+    q = engine.logs.subscribe()
+    try:
+        while True:
+            try:
+                entry = await asyncio.wait_for(q.get(), timeout=15)
+                await ws.send_json(entry)
+            except asyncio.TimeoutError:
+                # heartbeat
+                await ws.send_json({"level": "PING", "msg": "pong", "ts": ""})
+    except WebSocketDisconnect:
+        pass
+    except Exception:
+        pass
+    finally:
+        engine.logs.unsubscribe(q)
+
+
+# ------ Helpers ------
+def _bool_fix(d: dict) -> dict:
+    # SQLite stores bools as ints
+    for k, v in list(d.items()):
+        if isinstance(v, bool):
+            d[k] = 1 if v else 0
+    return d
+
+
+def _mask_profile(p: dict) -> dict:
+    p = dict(p)
+    if p.get("card_number"):
+        n = p["card_number"]
+        p["card_number"] = ("•" * max(0, len(n) - 4)) + n[-4:] if len(n) > 4 else ""
+    if p.get("card_cvv"):
+        p["card_cvv"] = "•••"
+    return p
+
+
+app.include_router(api)
 
 app.add_middleware(
     CORSMiddleware,
+    allow_origins=os.environ.get("CORS_ORIGINS", "*").split(","),
     allow_credentials=True,
-    allow_origins=os.environ.get('CORS_ORIGINS', '*').split(','),
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
-# Configure logging
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-)
-logger = logging.getLogger(__name__)
-
-@app.on_event("shutdown")
-async def shutdown_db_client():
-    client.close()
