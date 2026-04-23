@@ -4,14 +4,51 @@ A local Pokémon / hot-item scalper dashboard with optional auto-purchase. Every
 runs on **your own PC** — your logins, shipping address, and payment info never leave
 your computer.
 
-This guide assumes **you have never coded anything in your life.** Every step is
-spelled out. If something doesn't make sense, see [Troubleshooting](#13-troubleshooting).
+---
+
+## 🚀 EASIEST INSTALL — download the ready-to-run .exe
+
+If you just want to run the app without installing Python, Node.js, or anything else:
+
+1. Install **[Brave browser](https://brave.com/download)** (the bot drives your Brave window).
+2. Go to your repo's **Releases** page on GitHub:
+   `https://github.com/<your-username>/<your-repo>/releases/latest`
+3. Download **`NexusBot-windows.zip`** under **Assets**.
+4. Right-click the ZIP → **Extract All…** → pick anywhere (Desktop is fine).
+5. Open the extracted folder, double-click **`NexusBot.exe`**.
+6. The dashboard opens automatically at **http://127.0.0.1:8787**.
+7. Double-click **`Start-Brave.bat`** (also in the folder) to open Brave with the debug port,
+   log into your retailer accounts once, then click **CONNECT BRAVE** on the dashboard.
+
+That's it. No coding, no Python, no installs beyond Brave.
+
+> **First launch notes:** Windows Defender may flag the .exe once as "Windows protected your
+> PC" — click **More info** → **Run anyway**. This is a normal false-positive for
+> PyInstaller-bundled Python apps. The ZIP is ~250 MB (it includes the Chromium browser
+> driver and the entire Python runtime — you never need to install those yourself).
+
+### Don't see a Release yet?
+
+Someone needs to **tag a version** on the repo to trigger a build. From the repo page on
+GitHub → Releases → **Draft a new release** → create a new tag like `v1.0.0` → publish.
+GitHub's build pipeline automatically produces the .exe ZIP and attaches it to that
+release (takes ~8 minutes). You can also go to the **Actions** tab → **Build Windows EXE**
+→ **Run workflow** to build on-demand without tagging.
+
+---
+
+## 🛠 ALTERNATIVE — build from source (for developers)
+
+The rest of this guide is for people who want to run NexusBot from the source code
+directly (so they can modify it, add sites, tweak selectors, etc.). If you grabbed the
+.exe above, you can skip to [Section 8 — Dashboard tour](#8-dashboard-tour) for usage.
 
 ---
 
 ## Table of contents
 
-1. [What you're installing](#1-what-youre-installing)
+0. [🚀 Easy install — download the .exe](#-easiest-install--download-the-ready-to-run-exe) (start here if you don't code)
+1. [What you're installing](#1-what-youre-installing) *(build-from-source path)*
 2. [Download the project to your PC](#2-download-the-project-to-your-pc)
 3. [Install Python](#3-install-python)
 4. [Install Node.js](#4-install-nodejs)
