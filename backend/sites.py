@@ -126,6 +126,75 @@ _CHECKOUT_BTN = {
     "tcgplayer": ["button:has-text('Go to Cart')", "button:has-text('Checkout')"],
 }
 
+_PRICE_SELECTORS = {
+    "walmart": [
+        "span[itemprop='price']",
+        "span[data-automation-id='product-price']",
+        "div[data-testid='price-wrap'] span",
+        "[data-seo-id='hero-price']",
+    ],
+    "pokemoncenter": [
+        "[data-testid='product-price']",
+        ".product-price",
+        "span[class*='price']",
+    ],
+    "amazon": [
+        "#corePrice_feature_div .a-offscreen",
+        "#apex_desktop .a-offscreen",
+        ".a-price .a-offscreen",
+        "#priceblock_ourprice",
+    ],
+    "target": [
+        "[data-test='product-price']",
+        "span[data-test='product-price']",
+    ],
+    "bestbuy": [
+        ".priceView-customer-price span",
+        ".priceView-hero-price span",
+        "div[data-testid='customer-price'] span",
+    ],
+    "gamestop": [
+        ".product-price .sales .value",
+        ".price .sales .value",
+        "span[itemprop='price']",
+    ],
+    "costco": [
+        ".price .your-price .value",
+        ".op-price .currency + span",
+        "span[automation-id='productPriceOutput']",
+    ],
+    "samsclub": [
+        "[data-testid='price-value']",
+        ".Price-group .Price-characteristic",
+    ],
+    "tcgplayer": [
+        ".price-guide__points__price",
+        ".product-listing__price",
+        "span.spotlight__price",
+    ],
+}
+
+
+async def get_price(page, site: str) -> Optional[float]:
+    """Best-effort: extract the current listed price in dollars, or None if it
+    can't be read. Handles prices like '$12.99', '1,299.00', '$1,299'."""
+    import re
+    selectors = _PRICE_SELECTORS.get(site, [])
+    for s in selectors:
+        try:
+            el = page.locator(s).first
+            if not await el.count():
+                continue
+            txt = (await el.text_content(timeout=800)) or ""
+            txt = txt.strip().replace(",", "")
+            m = re.search(r"(\d+(?:\.\d{1,2})?)", txt)
+            if m:
+                return float(m.group(1))
+        except Exception:
+            continue
+    return None
+
+
 _PLACE_ORDER_BTN = {
     "walmart": ["button:has-text('Place order')", "button[data-automation-id='placeOrder']"],
     "pokemoncenter": ["button:has-text('Place Order')"],

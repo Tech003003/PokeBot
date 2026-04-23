@@ -49,6 +49,23 @@ export default function Settings() {
       </div>
 
       <div>
+        <div className="text-xs font-black tracking-[0.2em] uppercase text-[#A1A1AA] mb-3" style={{fontFamily:"'Chivo', sans-serif"}}>Price Guard</div>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 items-start">
+          <label className="flex items-center gap-2 text-xs text-[#A1A1AA]" data-testid="enforce-max-price-toggle">
+            <input type="checkbox" checked={s.enforce_max_price ?? true} onChange={(e) => setS({ ...s, enforce_max_price: e.target.checked })} />
+            Enforce per-item <span className="font-mono text-[#FFCC00]">Max Price</span>
+          </label>
+          <label className="flex items-center gap-2 text-xs text-[#A1A1AA]">
+            <input type="checkbox" checked={s.strict_price_guard ?? false} onChange={(e) => setS({ ...s, strict_price_guard: e.target.checked })} />
+            Strict: skip if price can't be read
+          </label>
+          <label><div className="text-[10px] text-[#A1A1AA] uppercase mb-1">Skip Cooldown (sec)</div>
+            <input type="number" min={10} className={field} value={s.price_guard_cooldown_s ?? 300} onChange={(e) => setS({ ...s, price_guard_cooldown_s: Number(e.target.value) })} />
+          </label>
+        </div>
+      </div>
+
+      <div>
         <div className="text-xs font-black tracking-[0.2em] uppercase text-[#A1A1AA] mb-3" style={{fontFamily:"'Chivo', sans-serif"}}>Safety</div>
         <label className="flex items-center gap-2 text-xs text-[#A1A1AA]" data-testid="safety-toggle">
           <input type="checkbox" checked={s.stop_before_place_order} onChange={(e) => setS({ ...s, stop_before_place_order: e.target.checked })} />

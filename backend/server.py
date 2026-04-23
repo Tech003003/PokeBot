@@ -108,6 +108,9 @@ class SettingsPatch(BaseModel):
     headless_fallback: Optional[bool] = None
     auto_refresh_on_error: Optional[bool] = None
     stop_before_place_order: Optional[bool] = None
+    enforce_max_price: Optional[bool] = None
+    strict_price_guard: Optional[bool] = None
+    price_guard_cooldown_s: Optional[int] = None
 
 
 class ConnectIn(BaseModel):

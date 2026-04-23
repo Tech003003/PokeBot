@@ -215,8 +215,33 @@ class MonitorEngine:
                 # Stock detection
                 btn = await sites.detect_in_stock(page, site)
                 if btn:
-                    self.log("SUCCESS", f"[{name}] IN STOCK — executing mode={mode}")
-                    await db.set_watch_status(watch_id, "IN_STOCK", "Detected in stock")
+                    # Price-drop guard (before any click)
+                    live_price = await sites.get_price(page, site)
+                    max_p = item.get("max_price")
+                    enforce = bool(settings.get("enforce_max_price", True))
+                    strict = bool(settings.get("strict_price_guard", False))
+                    cooldown = int(settings.get("price_guard_cooldown_s", 300))
+                    if enforce and max_p is not None:
+                        if live_price is None and strict:
+                            self.log("WARN", f"[{name}] price unreadable + strict guard → skipping ({cooldown}s cooldown)")
+                            await db.set_watch_status(watch_id, "WATCHING", "Skipped: price unreadable")
+                            await asyncio.sleep(cooldown)
+                            continue
+                        if live_price is not None and live_price > float(max_p):
+                            msg = f"Live ${live_price:.2f} > max ${float(max_p):.2f} — skipping"
+                            self.log("WARN", f"[{name}] {msg}")
+                            await db.set_watch_status(watch_id, "WATCHING", msg)
+                            await db.log_history({
+                                "watch_id": watch_id, "name": name, "site": site, "url": url,
+                                "outcome": "PRICE_SKIP", "price": live_price, "message": msg,
+                            })
+                            await self._notify("PRICE GUARD SKIP",
+                                               f"**{name}** ${live_price:.2f} > cap ${float(max_p):.2f}",
+                                               color=0xFFCC00)
+                            await asyncio.sleep(cooldown)
+                            continue
+                    self.log("SUCCESS", f"[{name}] IN STOCK{f' @ ${live_price:.2f}' if live_price else ''} — executing mode={mode}")
+                    await db.set_watch_status(watch_id, "IN_STOCK", f"In stock{f' @ ${live_price:.2f}' if live_price else ''}")
                     await self._notify(
                         "IN STOCK", f"**{name}** on {sites.SITE_LABELS.get(site, site)}\n{url}",
                         color=0x00FF66,
@@ -244,7 +269,7 @@ class MonitorEngine:
                         await db.set_watch_status(watch_id, "PURCHASED", "Added to cart")
                         await db.log_history({
                             "watch_id": watch_id, "name": name, "site": site, "url": url,
-                            "outcome": "IN_CART", "message": "Item added to cart",
+                            "outcome": "IN_CART", "price": live_price, "message": "Item added to cart",
                         })
                         await self._notify("IN CART", f"{name} — complete checkout in Brave", color=0x007AFF)
                         return
