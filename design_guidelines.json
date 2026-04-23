@@ -1,0 +1,111 @@
+{
+  "project_name": "NexusBot Command Center",
+  "theme": "dark",
+  "archetype": "The Performance Pro",
+  "colors": {
+    "background": "#09090b",
+    "surface": "#121214",
+    "surface_hover": "#18181b",
+    "border": "#27272a",
+    "border_highlight": "#3f3f46",
+    "primary": "#007AFF",
+    "primary_hover": "#3395FF",
+    "accent_success": "#00FF66",
+    "accent_error": "#FF3B30",
+    "accent_warning": "#FFCC00",
+    "accent_brave": "#FF6B00",
+    "text_primary": "#FFFFFF",
+    "text_secondary": "#A1A1AA",
+    "text_muted": "#52525B"
+  },
+  "typography": {
+    "heading_font": "Chivo",
+    "body_font": "Inter",
+    "mono_font": "JetBrains Mono",
+    "scale": {
+      "h1": "text-3xl font-black tracking-tighter uppercase",
+      "h2": "text-2xl font-bold tracking-tight uppercase",
+      "h3": "text-xl font-bold tracking-tight",
+      "h4": "text-xs font-black tracking-[0.2em] uppercase text-text_secondary",
+      "body": "text-sm font-medium",
+      "terminal": "text-[11px] sm:text-xs font-mono leading-relaxed"
+    }
+  },
+  "spacing": {
+    "global_padding": "p-4 sm:p-6 lg:p-8",
+    "bento_gap": "gap-4 sm:gap-6",
+    "inner_pad": "p-4",
+    "container": "max-w-[1600px] mx-auto"
+  },
+  "surfaces": {
+    "base": "bg-[#09090b] text-[#FFFFFF]",
+    "card": "bg-[#121214] border border-[#27272a] shadow-sm rounded-none",
+    "card_interactive": "bg-[#121214] border border-[#27272a] hover:border-[#3f3f46] hover:-translate-y-[1px] transition-all duration-200 cursor-pointer rounded-none",
+    "glass_header": "backdrop-blur-xl bg-[#09090b]/80 border-b border-[#27272a] sticky top-0 z-50",
+    "terminal_panel": "bg-[#050505] border border-[#27272a] shadow-inner rounded-none"
+  },
+  "components": {
+    "status_badges": {
+      "IN_STOCK": "inline-flex items-center gap-1.5 px-2 py-0.5 text-xs font-black uppercase tracking-wider bg-[#00FF66]/10 text-[#00FF66] border border-[#00FF66]/20",
+      "OOS": "inline-flex items-center gap-1.5 px-2 py-0.5 text-xs font-black uppercase tracking-wider bg-white/5 text-[#A1A1AA] border border-white/10",
+      "QUEUED": "inline-flex items-center gap-1.5 px-2 py-0.5 text-xs font-black uppercase tracking-wider bg-[#FFCC00]/10 text-[#FFCC00] border border-[#FFCC00]/20",
+      "ERROR": "inline-flex items-center gap-1.5 px-2 py-0.5 text-xs font-black uppercase tracking-wider bg-[#FF3B30]/10 text-[#FF3B30] border border-[#FF3B30]/20",
+      "PURCHASED": "inline-flex items-center gap-1.5 px-2 py-0.5 text-xs font-black uppercase tracking-wider bg-[#007AFF]/10 text-[#007AFF] border border-[#007AFF]/20"
+    },
+    "retailer_tags": {
+      "style": "font-mono text-xs text-[#A1A1AA] bg-[#18181b] px-1.5 py-0.5 border border-[#27272a]"
+    },
+    "buttons": {
+      "primary": "bg-[#007AFF] text-white hover:bg-[#3395FF] rounded-none px-4 py-2 font-bold tracking-wide text-sm transition-colors",
+      "kill_switch_start": "bg-[#00FF66]/10 text-[#00FF66] border border-[#00FF66]/50 hover:bg-[#00FF66]/20 rounded-none px-4 py-1.5 font-bold uppercase text-xs tracking-wider",
+      "kill_switch_stop": "bg-[#FF3B30] text-white hover:bg-[#FF3B30]/90 rounded-none px-4 py-1.5 font-bold uppercase text-xs tracking-wider",
+      "brave_connect": "flex items-center gap-2 px-3 py-1.5 text-xs font-bold uppercase tracking-wider border border-[#FF6B00] text-[#FF6B00] hover:bg-[#FF6B00]/10 transition-colors rounded-none"
+    },
+    "terminal": {
+      "logs_container": "p-3 font-mono text-[11px] text-[#A1A1AA] h-[300px] overflow-y-auto custom-scrollbar flex flex-col gap-1",
+      "log_levels": {
+        "INFO": "text-[#A1A1AA]",
+        "SUCCESS": "text-[#00FF66]",
+        "WARN": "text-[#FFCC00]",
+        "ERROR": "text-[#FF3B30]"
+      }
+    },
+    "table": {
+      "header": "text-xs font-black tracking-[0.1em] text-[#A1A1AA] uppercase border-b border-[#27272a] bg-[#09090b]/50",
+      "row": "border-b border-[#27272a]/50 hover:bg-[#18181b] transition-colors"
+    }
+  },
+  "layout": {
+    "grid_strategy": "Control Room Grid (Density, Data Correlation)",
+    "desktop": "grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 gap-4 sm:gap-6",
+    "bento_spans": {
+      "summary_cards": "col-span-1",
+      "main_monitor": "col-span-1 md:col-span-2 lg:col-span-3 row-span-2",
+      "side_panel": "col-span-1 row-span-2 flex flex-col gap-4 sm:gap-6"
+    }
+  },
+  "animations": {
+    "pulse_dot": "animate-pulse h-2 w-2 rounded-full",
+    "shimmer": "relative overflow-hidden before:absolute before:inset-0 before:-translate-x-full before:animate-[shimmer_2s_infinite] before:bg-gradient-to-r before:from-transparent before:via-white/5 before:to-transparent",
+    "countdown_tick": "animate-[pulse_1s_ease-in-out_infinite] font-mono text-[#FFCC00]"
+  },
+  "icons": {
+    "library": "lucide-react",
+    "strategy": "Minimal use of icons. Use geometric shapes and solid colors. Terminal aesthetic."
+  },
+  "image_urls": [],
+  "instructions_to_main_agent": [
+    "Build a robust command-center dashboard tailored for a technical scalper/bot operator.",
+    "Enforce 'The Performance Pro' archetype. Use sharp edges (rounded-none), solid dark colors (#09090b base), and 1px borders. NO SOFT SHADOWS OR PASTELS.",
+    "Implement the bento grid 'Control Room' layout for high data density.",
+    "Main monitor table should list Watchlist items with their status. Use 'components.status_badges' for consistent styling. Add a pulsing dot for 'IN STOCK'.",
+    "Retailer columns should use minimalist text brackets instead of heavy logos, e.g., '[ AMZN ]', '[ WMRT ]', '[ PKMN ]', using the 'retailer_tags' style.",
+    "Brave CDP connection should be displayed in the sticky header with the Brave brand color (#FF6B00).",
+    "The Global 'Start All / Stop All' kill switch must be prominent in the header.",
+    "Terminal Log panel must stay anchored to bottom, use JetBrains Mono, and color-code lines by log level.",
+    "Use Chivo font for headings, Inter for body/UI, and JetBrains Mono for prices, counts, and logs.",
+    "Add 'data-testid' to all buttons, inputs, and key status badges.",
+    "Incorporate a Drop Scheduler section showing a visual countdown timer component with a mono font.",
+    "Forms (Profiles, Global Settings) should use dense, technical Shadcn Form/Input components with rounded-none styling."
+  ]
+}
