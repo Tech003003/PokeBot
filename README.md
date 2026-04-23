@@ -391,8 +391,16 @@ sends a yellow Discord alert, and waits 300 seconds before trying again.
 **"Python is not recognized as an internal or external command"**
 → You skipped "Add python.exe to PATH" during install. Uninstall, reinstall, tick the box.
 
-**`yarn: command not found` or `Start.bat` hangs on `yarn install`**
-→ Run `corepack enable` in cmd, or `npm install -g yarn`.
+**`yarn: command not found` or the Start.bat hangs on `yarn install`**
+→ The Start.bat will now auto-enable Yarn via `corepack enable`, and fall back to `npm`
+if that fails. If it still errors, open a fresh Command Prompt and run `corepack enable`
+manually, or `npm install -g yarn`, then re-run `Start.bat`.
+
+**`ERROR: Could not find a version that satisfies the requirement emergentintegrations`**
+→ You grabbed an older version of `requirements.txt`. The fixed file only lists the
+actual dependencies the app uses (fastapi, uvicorn, playwright, discord.py, etc.). If
+you're still seeing this, re-download the project and make sure `backend/requirements.txt`
+has ~11 lines, not 133.
 
 **Dashboard shows `CDP connect failed: ECONNREFUSED`**
 → You didn't run `Start-Brave.bat`, or you closed the special Brave window. Run it again.
