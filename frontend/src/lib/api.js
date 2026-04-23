@@ -1,6 +1,13 @@
 import axios from "axios";
 
-export const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
+// In production builds (served locally by FastAPI), always use same-origin so
+// the app works at http://127.0.0.1:8787 regardless of where it's deployed.
+// In dev (yarn start), fall back to REACT_APP_BACKEND_URL for the cloud preview.
+const ENV_URL = process.env.REACT_APP_BACKEND_URL;
+export const BACKEND_URL =
+  process.env.NODE_ENV === "production"
+    ? (typeof window !== "undefined" ? window.location.origin : "")
+    : (ENV_URL || (typeof window !== "undefined" ? window.location.origin : ""));
 export const API = `${BACKEND_URL}/api`;
 
 export const api = axios.create({ baseURL: API, timeout: 15000 });
