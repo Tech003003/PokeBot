@@ -202,6 +202,64 @@ _CAPTCHA_SIGNATURES = [
     "Additional Verification Required",
 ]
 
+# Error modals / banners that appear AFTER a click when the retailer
+# silently rejects the add-to-cart (bot detection, rate limit, stock race, etc.)
+_ATC_ERROR_SIGNATURES = {
+    "walmart": ["could not be added", "not added to your cart", "try again later"],
+    "target": ["Item not added to cart", "Something went wrong and the item"],
+    "pokemoncenter": ["There was a problem", "Unable to add", "could not be added"],
+    "amazon": ["wasn't added to your cart", "could not add", "unavailable at this time"],
+    "bestbuy": ["couldn't be added", "unable to add", "try again"],
+    "gamestop": ["could not be added", "Error adding"],
+    "costco": ["could not be added", "Unable to add"],
+    "samsclub": ["not added", "try again"],
+    "tcgplayer": ["unable to add", "error adding"],
+}
+
+# Buttons to close an error modal so we can retry cleanly
+_ATC_ERROR_CLOSE = [
+    "button[aria-label='Close']",
+    "button[aria-label='close']",
+    "button:has-text('Continue shopping')",
+    "button:has-text('Try again')",
+    "button:has-text('OK')",
+    "button:has-text('Close')",
+    "[data-test='modalCloseButton']",
+]
+
+
+async def verify_atc_success(page, site: str, logger, wait_s: float = 0.9) -> bool:
+    """Wait briefly for an error modal/banner. Return False if one is detected,
+    True if the click looks successful. Closes the modal on the way out."""
+    await asyncio.sleep(wait_s)
+    sigs = _ATC_ERROR_SIGNATURES.get(site, [])
+    if not sigs:
+        return True
+    try:
+        body = await page.inner_text("body", timeout=2000)
+    except Exception:
+        return True
+    low = body.lower()
+    matched = None
+    for sig in sigs:
+        if sig.lower() in low:
+            matched = sig
+            break
+    if not matched:
+        return True
+    logger("WARN", f"[{SITE_LABELS.get(site, site.upper())}] cart rejected: '{matched}'")
+    # Best-effort close the modal so the next poll can retry
+    for sel in _ATC_ERROR_CLOSE:
+        try:
+            el = page.locator(sel).first
+            if await el.is_visible(timeout=400):
+                await el.click(timeout=1500)
+                await asyncio.sleep(0.3)
+                break
+        except Exception:
+            continue
+    return False
+
 # Checkout / place-order selectors per site (best-effort; retailers change these frequently)
 _CHECKOUT_BTN = {
     "walmart": ["button:has-text('Checkout')", "button[link-identifier='checkoutBtn']"],

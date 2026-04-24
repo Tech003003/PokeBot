@@ -307,6 +307,26 @@ class MonitorEngine:
                             await asyncio.sleep(0.5)
                             polls_since_reload = reload_every  # force reload next loop
                             continue
+
+                        # Post-click verification: retailer may silently reject with an error modal
+                        # (bot detection, stock race, rate limit). If so, treat as a retry.
+                        if btn_type != "waitlist":
+                            verified = await sites.verify_atc_success(page, site, self.logger_for(name))
+                            if not verified:
+                                atc_retries += 1
+                                if atc_max_retries and atc_retries >= atc_max_retries:
+                                    await db.set_watch_status(watch_id, "ERROR", f"Cart rejected {atc_retries}x — giving up")
+                                    return
+                                await db.set_watch_status(watch_id, "WATCHING", f"Cart rejected, retry #{atc_retries}")
+                                self.log("WARN", f"[{name}] server rejected cart add, retry #{atc_retries}")
+                                try:
+                                    await page.goto(url, wait_until="domcontentloaded", timeout=15000)
+                                except Exception:
+                                    pass
+                                polls_since_reload = 0
+                                await asyncio.sleep(0.5)
+                                continue
+
                         # Success — reset retry counter
                         atc_retries = 0
 
