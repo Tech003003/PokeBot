@@ -170,6 +170,8 @@ class MonitorEngine:
         settings = await db.get_all_settings()
         poll_ms = int(settings.get("poll_interval_ms", 700))
         jitter = int(settings.get("jitter_ms", 200))
+        reload_every = int(settings.get("reload_every_n_polls", 10))
+        atc_max_retries = int(settings.get("atc_max_retries", 0))  # 0 = unlimited
 
         page = None
         try:
@@ -177,14 +179,34 @@ class MonitorEngine:
             self.log("INFO", f"[{sites.SITE_LABELS.get(site, site)}] Monitoring: {name}")
             await db.set_watch_status(watch_id, "WATCHING", "Started")
 
+            # Initial hard navigation (only place we do page.goto by default)
+            try:
+                await page.goto(url, wait_until="domcontentloaded", timeout=20000)
+            except Exception as e:
+                self.log("WARN", f"[{name}] initial nav: {str(e)[:80]}")
+
+            polls_since_reload = 0
+            atc_retries = 0
+
             while True:
                 t0 = time.monotonic()
                 try:
-                    await page.goto(url, wait_until="domcontentloaded", timeout=20000)
+                    # Periodic soft reload to refresh client-side state; no full re-navigation
+                    if polls_since_reload >= reload_every:
+                        try:
+                            await page.reload(wait_until="domcontentloaded", timeout=15000)
+                        except Exception as e:
+                            # Hard fallback: full goto
+                            try:
+                                await page.goto(url, wait_until="domcontentloaded", timeout=20000)
+                            except Exception:
+                                self.log("WARN", f"[{name}] reload recovered: {str(e)[:60]}")
+                        polls_since_reload = 0
+                    polls_since_reload += 1
                 except Exception as e:
-                    await db.set_watch_status(watch_id, "ERROR", f"nav: {str(e)[:80]}")
-                    self.log("WARN", f"[{name}] nav error: {str(e)[:80]}")
-                    await asyncio.sleep(2)
+                    self.log("WARN", f"[{name}] poll recover: {str(e)[:80]}")
+                    await asyncio.sleep(1)
+                    polls_since_reload = 0
                     continue
 
                 # Captcha pause
@@ -194,6 +216,7 @@ class MonitorEngine:
                     while await sites.is_captcha(page):
                         await asyncio.sleep(3)
                     self.log("SUCCESS", f"[{name}] Captcha cleared")
+                    polls_since_reload = 0
                     continue
 
                 # Queue / waiting-room handling (Walmart 9PM drop scenario)
@@ -202,7 +225,6 @@ class MonitorEngine:
                     self.log("WARN", f"[{name}] In queue — auto-advancing every 3s…")
                     queue_start = time.monotonic()
                     while await sites.is_queue(page, site):
-                        # Try refresh / pressing "Continue" if present
                         for btn_sel in [
                             "button:has-text('Continue')",
                             "button:has-text('Retry')",
@@ -222,6 +244,7 @@ class MonitorEngine:
                                 pass
                             queue_start = time.monotonic()
                     self.log("SUCCESS", f"[{name}] Queue cleared")
+                    polls_since_reload = 0
                     continue
 
                 # Stock detection (per allowed button types)
@@ -252,6 +275,7 @@ class MonitorEngine:
                                                color=0xFFCC00)
                             await asyncio.sleep(cooldown)
                             continue
+
                     self.log("SUCCESS", f"[{name}] IN STOCK{f' @ ${live_price:.2f}' if live_price else ''} ({btn_type}) — executing mode={mode}")
                     await db.set_watch_status(watch_id, "IN_STOCK", f"{sites.BUTTON_LABELS.get(btn_type, btn_type)}{f' @ ${live_price:.2f}' if live_price else ''}")
                     await self._notify(
@@ -265,73 +289,101 @@ class MonitorEngine:
                             "outcome": "NOTIFIED", "message": f"Monitor-only ({btn_type})",
                         })
                         await asyncio.sleep(60)
+                        polls_since_reload = 0
                         continue
 
-                    # Try to click the detected button
-                    ok = await sites.add_to_cart(page, site, self.logger_for(name), btn=btn, btn_type=btn_type)
-                    if not ok:
-                        await db.set_watch_status(watch_id, "ERROR", f"{btn_type} click failed")
-                        await asyncio.sleep(1)
-                        continue
+                    # Resilient purchase flow — any error here returns to the monitor loop
+                    # instead of killing the worker.
+                    try:
+                        ok = await sites.add_to_cart(page, site, self.logger_for(name), btn=btn, btn_type=btn_type)
+                        if not ok:
+                            atc_retries += 1
+                            if atc_max_retries and atc_retries >= atc_max_retries:
+                                await db.set_watch_status(watch_id, "ERROR", f"ATC failed {atc_retries}x — giving up")
+                                self.log("ERROR", f"[{name}] ATC failed {atc_retries}x, hit retry cap, stopping")
+                                return
+                            await db.set_watch_status(watch_id, "WATCHING", f"ATC retry #{atc_retries}")
+                            self.log("WARN", f"[{name}] ATC click failed, retry #{atc_retries} (will keep trying)")
+                            await asyncio.sleep(0.5)
+                            polls_since_reload = reload_every  # force reload next loop
+                            continue
+                        # Success — reset retry counter
+                        atc_retries = 0
 
-                    # Waitlist: clicking just signs up for notification — terminal, no checkout
-                    if btn_type == "waitlist":
-                        await db.set_watch_status(watch_id, "PURCHASED", "Joined waitlist / notify-me")
-                        await db.log_history({
-                            "watch_id": watch_id, "name": name, "site": site, "url": url,
-                            "outcome": "WAITLISTED", "price": live_price, "message": "Notify-me signup clicked",
-                        })
-                        return
-
-                    if mode in ("cart", "checkout", "auto"):
-                        await sites.goto_cart(page, site)
-
-                    if mode == "cart":
-                        await db.set_watch_status(watch_id, "PURCHASED", "Added to cart")
-                        await db.log_history({
-                            "watch_id": watch_id, "name": name, "site": site, "url": url,
-                            "outcome": "IN_CART", "price": live_price, "message": "Item added to cart",
-                        })
-                        await self._notify("IN CART", f"{name} — complete checkout in Brave", color=0x007AFF)
-                        return
-
-                    # Proceed to checkout
-                    await sites.click_checkout(page, site, self.logger_for(name))
-                    if profile:
-                        await sites.autofill(page, profile, self.logger_for(name))
-
-                    if mode == "checkout":
-                        await db.set_watch_status(watch_id, "PURCHASED", "Checkout filled — stopped before place order")
-                        await db.log_history({
-                            "watch_id": watch_id, "name": name, "site": site, "url": url,
-                            "outcome": "CHECKOUT_READY", "message": "Auto-filled, stopped before Place Order",
-                        })
-                        await self._notify("READY TO CONFIRM", f"{name} — click Place Order in Brave", color=0xFFCC00)
-                        return
-
-                    if mode == "auto":
-                        # Extra safety: honor global stop_before_place_order
-                        if settings.get("stop_before_place_order", True):
-                            await db.set_watch_status(watch_id, "PURCHASED", "Stopped before Place Order (global safety)")
+                        # Waitlist: terminal, no checkout
+                        if btn_type == "waitlist":
+                            await db.set_watch_status(watch_id, "PURCHASED", "Joined waitlist / notify-me")
                             await db.log_history({
                                 "watch_id": watch_id, "name": name, "site": site, "url": url,
-                                "outcome": "CHECKOUT_READY", "message": "Global safety held final click",
+                                "outcome": "WAITLISTED", "price": live_price, "message": "Notify-me signup clicked",
                             })
-                            await self._notify("READY TO CONFIRM", f"{name} — place order disabled by safety", color=0xFFCC00)
                             return
-                        placed = await sites.click_place_order(page, site, self.logger_for(name))
-                        outcome = "PURCHASED" if placed else "FAILED"
-                        await db.set_watch_status(watch_id, "PURCHASED" if placed else "ERROR",
-                                                  "Order placed" if placed else "Place order failed")
-                        await db.log_history({
-                            "watch_id": watch_id, "name": name, "site": site, "url": url,
-                            "outcome": outcome, "message": "Full auto",
-                        })
-                        await self._notify(
-                            "ORDER PLACED" if placed else "PLACE ORDER FAILED",
-                            f"{name}", color=0x00FF66 if placed else 0xFF3B30,
-                        )
-                        return
+
+                        if mode in ("cart", "checkout", "auto"):
+                            await sites.goto_cart(page, site)
+
+                        if mode == "cart":
+                            await db.set_watch_status(watch_id, "PURCHASED", "Added to cart")
+                            await db.log_history({
+                                "watch_id": watch_id, "name": name, "site": site, "url": url,
+                                "outcome": "IN_CART", "price": live_price, "message": "Item added to cart",
+                            })
+                            await self._notify("IN CART", f"{name} — complete checkout in Brave", color=0x007AFF)
+                            return
+
+                        # Proceed to checkout
+                        await sites.click_checkout(page, site, self.logger_for(name))
+                        if profile:
+                            await sites.autofill(page, profile, self.logger_for(name))
+
+                        if mode == "checkout":
+                            await db.set_watch_status(watch_id, "PURCHASED", "Checkout filled — stopped before place order")
+                            await db.log_history({
+                                "watch_id": watch_id, "name": name, "site": site, "url": url,
+                                "outcome": "CHECKOUT_READY", "message": "Auto-filled, stopped before Place Order",
+                            })
+                            await self._notify("READY TO CONFIRM", f"{name} — click Place Order in Brave", color=0xFFCC00)
+                            return
+
+                        if mode == "auto":
+                            if settings.get("stop_before_place_order", True):
+                                await db.set_watch_status(watch_id, "PURCHASED", "Stopped before Place Order (global safety)")
+                                await db.log_history({
+                                    "watch_id": watch_id, "name": name, "site": site, "url": url,
+                                    "outcome": "CHECKOUT_READY", "message": "Global safety held final click",
+                                })
+                                await self._notify("READY TO CONFIRM", f"{name} — place order disabled by safety", color=0xFFCC00)
+                                return
+                            placed = await sites.click_place_order(page, site, self.logger_for(name))
+                            outcome = "PURCHASED" if placed else "FAILED"
+                            await db.set_watch_status(watch_id, "PURCHASED" if placed else "WATCHING",
+                                                      "Order placed" if placed else "Place order failed — will retry")
+                            await db.log_history({
+                                "watch_id": watch_id, "name": name, "site": site, "url": url,
+                                "outcome": outcome, "price": live_price, "message": "Full auto",
+                            })
+                            await self._notify(
+                                "ORDER PLACED" if placed else "PLACE ORDER FAILED",
+                                f"{name}", color=0x00FF66 if placed else 0xFF3B30,
+                            )
+                            if placed:
+                                return
+                            # else fall through to except/continue-style retry
+                            atc_retries += 1
+                            await asyncio.sleep(0.5)
+                            continue
+                    except Exception as e:
+                        # Any exception during purchase — log & resume monitoring (don't kill worker)
+                        atc_retries += 1
+                        self.log("WARN", f"[{name}] purchase flow error (retry #{atc_retries}): {str(e)[:120]}")
+                        await db.set_watch_status(watch_id, "WATCHING", f"Retrying after error #{atc_retries}")
+                        try:
+                            await page.goto(url, wait_until="domcontentloaded", timeout=15000)
+                        except Exception:
+                            pass
+                        polls_since_reload = 0
+                        await asyncio.sleep(0.5)
+                        continue
                 else:
                     await db.set_watch_status(watch_id, "OOS", "Out of stock")
 

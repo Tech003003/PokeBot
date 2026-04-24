@@ -121,6 +121,8 @@ class SettingsPatch(BaseModel):
     discord_enabled: Optional[bool] = None
     discord_bot_token: Optional[str] = None
     discord_channel_rules: Optional[dict] = None
+    reload_every_n_polls: Optional[int] = None
+    atc_max_retries: Optional[int] = None
 
 
 class ConnectIn(BaseModel):

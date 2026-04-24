@@ -58,6 +58,12 @@ export default function Settings() {
           <label><div className="text-[10px] text-[#A1A1AA] uppercase mb-1">Brave CDP URL</div>
             <input className={field} value={s.cdp_url} onChange={(e) => setS({ ...s, cdp_url: e.target.value })} />
           </label>
+          <label title="Do a soft reload every N polls (instead of full navigation every poll). Higher = faster polling, lower = fresher state."><div className="text-[10px] text-[#A1A1AA] uppercase mb-1">Reload Every (polls)</div>
+            <input type="number" min={1} max={200} className={field} value={s.reload_every_n_polls ?? 10} onChange={(e) => setS({ ...s, reload_every_n_polls: Number(e.target.value) })} data-testid="reload-every-input" />
+          </label>
+          <label title="Max times to retry the Add-to-Cart click before giving up. 0 = never give up."><div className="text-[10px] text-[#A1A1AA] uppercase mb-1">ATC Retry Cap (0 = inf)</div>
+            <input type="number" min={0} className={field} value={s.atc_max_retries ?? 0} onChange={(e) => setS({ ...s, atc_max_retries: Number(e.target.value) })} data-testid="atc-retries-input" />
+          </label>
         </div>
       </div>
 

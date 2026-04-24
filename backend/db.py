@@ -91,6 +91,8 @@ DEFAULT_SETTINGS = {
     "discord_enabled": False,
     "discord_bot_token": "",
     "discord_channel_rules": {},       # { channel_id: {action, priority, max_price, profile_id, auto_start} }
+    "reload_every_n_polls": 10,        # do a soft reload every N polls (saves full navigations)
+    "atc_max_retries": 0,              # 0 = unlimited retries on ATC click failures
 }
 
 
