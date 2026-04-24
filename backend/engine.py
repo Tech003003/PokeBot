@@ -60,15 +60,42 @@ class LogBus:
 class MonitorEngine:
     def __init__(self):
         self.pw = None
-        self.browser = None
-        self.context = None
-        self.connected: bool = False
+        # Multi-browser sessions keyed by browsers.id. Each entry:
+        #   {"browser": BrowserConnection, "context": Context, "cdp_url": str}
+        self.sessions: dict[str, dict] = {}
         self.running: bool = False
         self.workers: dict[str, asyncio.Task] = {}  # watch_id -> task
         self.drop_tasks: dict[str, asyncio.Task] = {}
         self.logs = LogBus()
         self._connect_lock = asyncio.Lock()
         self.discord = DiscordListener(self)
+
+    # ------- Back-compat properties for legacy single-browser callers.
+    @property
+    def browser(self):
+        """Legacy: return the default session's Browser, or None."""
+        sess = self.sessions.get(self._default_session_id())
+        return sess["browser"] if sess else None
+
+    @property
+    def context(self):
+        sess = self.sessions.get(self._default_session_id())
+        return sess["context"] if sess else None
+
+    @property
+    def connected(self) -> bool:
+        # "Connected" means at least ONE browser session is live.
+        return any(
+            s["browser"] and s["browser"].is_connected() for s in self.sessions.values()
+        )
+
+    def _default_session_id(self) -> Optional[str]:
+        # Returns the id of whichever session was registered as default, or any
+        # session if there's no explicit default yet (best-effort).
+        for bid, sess in self.sessions.items():
+            if sess.get("is_default"):
+                return bid
+        return next(iter(self.sessions.keys()), None)
 
     # ------- logging helpers -------
     def log(self, level: str, msg: str, meta: Optional[dict] = None):
@@ -79,55 +106,112 @@ class MonitorEngine:
             self.log(level, f"{name}: {msg}")
         return _inner
 
-    async def connect_brave(self, cdp_url: Optional[str] = None) -> dict:
+    async def _resolve_browser(self, browser_id: Optional[str]) -> dict:
+        """Load a browsers row by id, or the default row if browser_id is None/unknown."""
+        row = None
+        if browser_id:
+            row = await db.get_browser(browser_id)
+        if not row:
+            row = await db.get_default_browser()
+        if not row:
+            # No rows at all — fabricate one from the legacy setting so old
+            # installs still work. init_db() usually seeds this first boot.
+            cdp = await db.get_setting("cdp_url") or "http://127.0.0.1:9222"
+            row = {"id": "legacy", "name": "Default", "cdp_url": cdp, "is_default": 1,
+                   "max_workers": 0, "user_data_dir": "", "proxy": ""}
+        return row
+
+    async def connect_brave(self, cdp_url: Optional[str] = None,
+                            browser_id: Optional[str] = None) -> dict:
+        """Attach Playwright over CDP for a single browser row. Back-compat:
+        if called with just `cdp_url`, we attach to the default browser row and
+        override its URL with the supplied one (mirrors the old single-browser
+        behaviour the header Connect button uses)."""
         async with self._connect_lock:
-            url = cdp_url or await db.get_setting("cdp_url")
+            row = await self._resolve_browser(browser_id)
+            bid = row["id"]
+            url = cdp_url or row.get("cdp_url")
             try:
                 if self.pw is None:
                     self.pw = await async_playwright().start()
-                if self.browser and self.browser.is_connected():
-                    return {"connected": True, "cdp_url": url, "message": "Already connected"}
-                self.browser = await self.pw.chromium.connect_over_cdp(url)
-                ctxs = self.browser.contexts
-                self.context = ctxs[0] if ctxs else await self.browser.new_context()
-                self.connected = True
-                self.log("SUCCESS", f"Connected to Brave at {url}")
-                return {"connected": True, "cdp_url": url, "message": "Connected"}
+                existing = self.sessions.get(bid)
+                if existing and existing["browser"] and existing["browser"].is_connected():
+                    return {"connected": True, "browser_id": bid, "name": row["name"],
+                            "cdp_url": url, "message": "Already connected"}
+                browser = await self.pw.chromium.connect_over_cdp(url)
+                ctxs = browser.contexts
+                context = ctxs[0] if ctxs else await browser.new_context()
+                self.sessions[bid] = {
+                    "browser": browser, "context": context, "cdp_url": url,
+                    "is_default": bool(row.get("is_default")),
+                    "name": row.get("name", "Browser"),
+                    "max_workers": int(row.get("max_workers") or 0),
+                }
+                self.log("SUCCESS", f"Connected to {row.get('name','Brave')} @ {url}")
+                return {"connected": True, "browser_id": bid, "name": row["name"],
+                        "cdp_url": url, "message": "Connected"}
             except Exception as e:
-                self.connected = False
-                self.log("ERROR", f"CDP connect failed: {str(e)[:160]}")
-                return {"connected": False, "cdp_url": url, "message": str(e)[:200]}
+                self.log("ERROR", f"CDP connect failed ({row.get('name','?')}): {str(e)[:160]}")
+                return {"connected": False, "browser_id": bid, "cdp_url": url,
+                        "message": str(e)[:200]}
 
-    async def disconnect_brave(self) -> dict:
-        try:
-            if self.browser:
-                await self.browser.close()
-        except Exception:
-            pass
-        self.browser = None
-        self.context = None
-        self.connected = False
-        self.log("INFO", "Disconnected from Brave")
-        return {"connected": False}
+    async def disconnect_brave(self, browser_id: Optional[str] = None) -> dict:
+        """Disconnect one session. No arg → disconnect ALL sessions (legacy behaviour
+        for the global header disconnect button)."""
+        targets = [browser_id] if browser_id else list(self.sessions.keys())
+        for bid in targets:
+            sess = self.sessions.pop(bid, None)
+            if sess:
+                try:
+                    await sess["browser"].close()
+                except Exception:
+                    pass
+                self.log("INFO", f"Disconnected {sess.get('name','Brave')}")
+        return {"connected": self.connected, "active": list(self.sessions.keys())}
 
     async def status(self) -> dict:
+        browsers_status = []
+        for bid, sess in self.sessions.items():
+            browsers_status.append({
+                "browser_id": bid,
+                "name": sess.get("name"),
+                "cdp_url": sess.get("cdp_url"),
+                "connected": bool(sess["browser"] and sess["browser"].is_connected()),
+                "workers": sum(1 for w in self._workers_by_browser().get(bid, [])),
+                "max_workers": sess.get("max_workers", 0),
+            })
         return {
-            "connected": bool(self.browser and self.browser.is_connected()) if self.browser else False,
+            "connected": self.connected,
             "running": self.running,
             "active_workers": list(self.workers.keys()),
             "active_drops": list(self.drop_tasks.keys()),
             "discord_connected": self.discord.connected,
+            "browsers": browsers_status,
         }
 
-    async def _ensure_context(self):
-        if not self.context:
-            res = await self.connect_brave()
-            if not res["connected"]:
-                raise RuntimeError("Brave not connected")
-        return self.context
+    def _workers_by_browser(self) -> dict[str, list[str]]:
+        """Map each browser_id -> list of watch_ids currently running there."""
+        out: dict[str, list[str]] = {}
+        for wid, meta in getattr(self, "_worker_meta", {}).items():
+            bid = meta.get("browser_id") or "_default"
+            out.setdefault(bid, []).append(wid)
+        return out
 
-    async def _new_page(self):
-        ctx = await self._ensure_context()
+    async def _ensure_context(self, browser_id: Optional[str] = None):
+        row = await self._resolve_browser(browser_id)
+        bid = row["id"]
+        sess = self.sessions.get(bid)
+        if not sess or not sess["browser"] or not sess["browser"].is_connected():
+            res = await self.connect_brave(browser_id=bid)
+            if not res.get("connected"):
+                raise RuntimeError(
+                    f"{row.get('name','Brave')} not connected: {res.get('message','')}"
+                )
+            sess = self.sessions.get(bid)
+        return sess["context"]
+
+    async def _new_page(self, browser_id: Optional[str] = None):
+        ctx = await self._ensure_context(browser_id)
         return await ctx.new_page()
 
     # ------- Discord / history notify -------
@@ -174,8 +258,9 @@ class MonitorEngine:
 
         page = None
         keep_page_open = False  # set True on successful purchase so the user sees the result
+        browser_id = item.get("browser_id")
         try:
-            page = await self._new_page()
+            page = await self._new_page(browser_id=browser_id)
             self.log("INFO", f"[{sites.SITE_LABELS.get(site, site)}] Monitoring: {name}")
             await db.set_watch_status(watch_id, "WATCHING", "Started")
 
@@ -530,17 +615,18 @@ class MonitorEngine:
         self.log("WARN", f"[DROP:{name}] ARMED — starting rapid poll window")
 
         if not self.connected:
-            await self.connect_brave()
+            await self.connect_brave(browser_id=drop.get("browser_id"))
 
         # Spawn one page per URL (blast mode) or one rolling page (sequential)
         blast = bool(drop.get("blast_mode"))
         profile = await db.get_profile(drop["profile_id"]) if drop.get("profile_id") else None
         mode = drop["purchase_mode"] or "cart"
         duration_s = int(drop.get("duration_min") or 15) * 60
+        drop_browser_id = drop.get("browser_id")
 
         async def hammer(u: str):
             try:
-                page = await self._new_page()
+                page = await self._new_page(browser_id=drop_browser_id)
             except Exception as e:
                 self.log("ERROR", f"[DROP:{name}] page err: {str(e)[:80]}"); return
             end_at = datetime.now(timezone.utc).timestamp() + duration_s

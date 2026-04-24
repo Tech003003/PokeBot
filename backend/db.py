@@ -72,6 +72,16 @@ CREATE TABLE IF NOT EXISTS settings (
     k TEXT PRIMARY KEY,
     v TEXT NOT NULL
 );
+CREATE TABLE IF NOT EXISTS browsers (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    cdp_url TEXT NOT NULL,
+    user_data_dir TEXT,
+    proxy TEXT,
+    max_workers INTEGER NOT NULL DEFAULT 0,
+    is_default INTEGER NOT NULL DEFAULT 0,
+    created_at TEXT NOT NULL
+);
 """
 
 DEFAULT_SETTINGS = {
@@ -115,6 +125,15 @@ async def init_db():
             await db.execute("ALTER TABLE drops ADD COLUMN duration_min INTEGER NOT NULL DEFAULT 15")
         except Exception:
             pass
+        # Migration: browser_id columns so items/drops can target a specific Brave.
+        try:
+            await db.execute("ALTER TABLE watchlist ADD COLUMN browser_id TEXT")
+        except Exception:
+            pass
+        try:
+            await db.execute("ALTER TABLE drops ADD COLUMN browser_id TEXT")
+        except Exception:
+            pass
         await db.commit()
         for k, v in DEFAULT_SETTINGS.items():
             await db.execute(
@@ -128,6 +147,20 @@ async def init_db():
                 (json.dumps(new_default), k, json.dumps(old_default)),
             )
         await db.commit()
+    # Seed a Default browser row if the user has none yet. It mirrors the
+    # legacy `cdp_url` setting so the existing single-browser flow keeps working
+    # without any config changes.
+    existing = await list_browsers()
+    if not existing:
+        legacy_cdp = await get_setting("cdp_url") or "http://127.0.0.1:9222"
+        await create_browser({
+            "name": "Default",
+            "cdp_url": legacy_cdp,
+            "user_data_dir": "",
+            "proxy": "",
+            "max_workers": 0,
+            "is_default": 1,
+        })
 
 
 async def get_setting(key: str) -> Any:
@@ -284,3 +317,58 @@ async def list_history(limit: int = 200):
 
 async def log_history(entry: dict):
     return await _insert("history", entry)
+
+
+# -- Browsers ------------------------------------------------------------
+# Each row describes a Brave instance the engine can attach to over CDP.
+# `is_default=1` is the fallback for watchlist items / drops that don't pin a
+# specific browser. `max_workers=0` means "use the global concurrent_workers".
+async def list_browsers() -> list[dict]:
+    return await _fetchall("browsers")
+
+
+async def get_browser(id_: str) -> Optional[dict]:
+    return await _fetchone("browsers", id_)
+
+
+async def get_default_browser() -> Optional[dict]:
+    async with aiosqlite.connect(DB_PATH) as db:
+        db.row_factory = aiosqlite.Row
+        async with db.execute(
+            "SELECT * FROM browsers WHERE is_default=1 ORDER BY created_at ASC LIMIT 1"
+        ) as cur:
+            row = await cur.fetchone()
+            if row:
+                return dict(row)
+        async with db.execute(
+            "SELECT * FROM browsers ORDER BY created_at ASC LIMIT 1"
+        ) as cur:
+            row = await cur.fetchone()
+            return dict(row) if row else None
+
+
+async def create_browser(data: dict) -> dict:
+    # If the caller is creating the first default, make sure no other row is
+    # still flagged as default.
+    if data.get("is_default"):
+        async with aiosqlite.connect(DB_PATH) as db:
+            await db.execute("UPDATE browsers SET is_default=0")
+            await db.commit()
+    return await _insert("browsers", data)
+
+
+async def update_browser(id_: str, patch: dict) -> Optional[dict]:
+    if patch.get("is_default"):
+        async with aiosqlite.connect(DB_PATH) as db:
+            await db.execute("UPDATE browsers SET is_default=0 WHERE id<>?", (id_,))
+            await db.commit()
+    return await _update("browsers", id_, patch)
+
+
+async def delete_browser(id_: str) -> bool:
+    # Null-out browser_id references so orphaned items fall back to the default.
+    async with aiosqlite.connect(DB_PATH) as db:
+        await db.execute("UPDATE watchlist SET browser_id=NULL WHERE browser_id=?", (id_,))
+        await db.execute("UPDATE drops SET browser_id=NULL WHERE browser_id=?", (id_,))
+        await db.commit()
+    return await _delete("browsers", id_)

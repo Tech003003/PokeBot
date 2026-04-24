@@ -18,7 +18,7 @@ function Countdown({ target }) {
   );
 }
 
-export default function Drops({ sites, profiles }) {
+export default function Drops({ sites, profiles, browsers }) {
   const [items, setItems] = useState([]);
   const [editing, setEditing] = useState(null);
   const load = async () => { const r = await api.get("/drops"); setItems(r.data); };
@@ -55,12 +55,12 @@ export default function Drops({ sites, profiles }) {
           </div>
         ))}
       </div>
-      {editing && <DropModal item={editing} sites={sites} profiles={profiles} onClose={() => { setEditing(null); load(); }} />}
+      {editing && <DropModal item={editing} sites={sites} profiles={profiles} browsers={browsers} onClose={() => { setEditing(null); load(); }} />}
     </div>
   );
 }
 
-function DropModal({ item, sites, profiles, onClose }) {
+function DropModal({ item, sites, profiles, browsers, onClose }) {
   const defaultRunAt = () => {
     const d = new Date(Date.now() + 5 * 60000);
     d.setSeconds(0, 0);
@@ -75,6 +75,7 @@ function DropModal({ item, sites, profiles, onClose }) {
     blast_mode: item.blast_mode ?? true,
     purchase_mode: item.purchase_mode || "cart",
     profile_id: item.profile_id || "",
+    browser_id: item.browser_id || "",
     duration_min: item.duration_min ?? 15,
   });
   const save = async () => {
@@ -86,6 +87,7 @@ function DropModal({ item, sites, profiles, onClose }) {
         name: f.name, site: f.site, run_at: runAtISO, urls,
         queue_handling: !!f.queue_handling, blast_mode: !!f.blast_mode,
         purchase_mode: f.purchase_mode, profile_id: f.profile_id || null,
+        browser_id: f.browser_id || null,
         duration_min: Number(f.duration_min) || 15,
       });
       toast.success("Drop scheduled"); onClose();
@@ -121,6 +123,12 @@ function DropModal({ item, sites, profiles, onClose }) {
             <select className={field} value={f.profile_id} onChange={(e) => setF({ ...f, profile_id: e.target.value })}>
               <option value="">— none —</option>
               {profiles?.map((p) => <option key={p.id} value={p.id}>{p.label}</option>)}
+            </select>
+          </label>
+          <label><div className="text-[10px] text-[#A1A1AA] uppercase mb-1">Browser</div>
+            <select data-testid="drop-browser-select" className={field} value={f.browser_id} onChange={(e) => setF({ ...f, browser_id: e.target.value })}>
+              <option value="">— default —</option>
+              {browsers?.map((b) => <option key={b.id} value={b.id}>{b.name}{b.is_default ? " (default)" : ""}</option>)}
             </select>
           </label>
           <label className="flex items-center gap-2 col-span-1"><input type="checkbox" checked={f.queue_handling} onChange={(e) => setF({ ...f, queue_handling: e.target.checked })} /> <span className="text-xs text-[#A1A1AA]">Auto-advance queue</span></label>

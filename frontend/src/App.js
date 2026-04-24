@@ -6,15 +6,17 @@ import Header from "@/components/Header";
 import Watchlist from "@/components/Watchlist";
 import Profiles from "@/components/Profiles";
 import Drops from "@/components/Drops";
+import Browsers from "@/components/Browsers";
 import SettingsPanel from "@/components/Settings";
 import History from "@/components/History";
 import LogTerminal from "@/components/LogTerminal";
-import { Activity, List, Clock, User, Settings as Cog, History as HistIcon } from "lucide-react";
+import { Activity, List, Clock, User, Settings as Cog, History as HistIcon, Chrome } from "lucide-react";
 
 const TABS = [
   { id: "monitor", label: "Monitor", icon: Activity },
   { id: "watch", label: "Watchlist", icon: List },
   { id: "drops", label: "Drops", icon: Clock },
+  { id: "browsers", label: "Browsers", icon: Chrome },
   { id: "profiles", label: "Profiles", icon: User },
   { id: "history", label: "History", icon: HistIcon },
   { id: "settings", label: "Settings", icon: Cog },
@@ -26,13 +28,14 @@ function App() {
   const [sites, setSites] = useState(null);
   const [profiles, setProfiles] = useState([]);
   const [watch, setWatch] = useState([]);
+  const [browsers, setBrowsers] = useState([]);
 
   const refresh = useCallback(async () => {
     try {
-      const [st, sm, pr, wl] = await Promise.all([
-        api.get("/status"), api.get("/meta/sites"), api.get("/profiles"), api.get("/watch"),
+      const [st, sm, pr, wl, bs] = await Promise.all([
+        api.get("/status"), api.get("/meta/sites"), api.get("/profiles"), api.get("/watch"), api.get("/browsers"),
       ]);
-      setStatus(st.data); setSites(sm.data); setProfiles(pr.data); setWatch(wl.data);
+      setStatus(st.data); setSites(sm.data); setProfiles(pr.data); setWatch(wl.data); setBrowsers(bs.data);
     } catch (e) { console.error(e); }
   }, []);
 
@@ -100,8 +103,9 @@ function App() {
           </div>
         )}
 
-        {tab === "watch" && <Watchlist sites={sites} profiles={profiles} onChange={refresh}/>}
-        {tab === "drops" && <Drops sites={sites} profiles={profiles}/>}
+        {tab === "watch" && <Watchlist sites={sites} profiles={profiles} browsers={browsers} onChange={refresh}/>}
+        {tab === "drops" && <Drops sites={sites} profiles={profiles} browsers={browsers}/>}
+        {tab === "browsers" && <Browsers onChange={refresh}/>}
         {tab === "profiles" && <Profiles onChange={refresh}/>}
         {tab === "history" && <History/>}
         {tab === "settings" && <SettingsPanel/>}

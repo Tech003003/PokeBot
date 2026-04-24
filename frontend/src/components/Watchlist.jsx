@@ -3,7 +3,7 @@ import { api, MODES, STATUS_COLORS } from "@/lib/api";
 import { toast } from "sonner";
 import { Play, Square, Trash2, Plus, Pencil } from "lucide-react";
 
-export default function Watchlist({ sites, profiles, onChange }) {
+export default function Watchlist({ sites, profiles, browsers, onChange }) {
   const [items, setItems] = useState([]);
   const [editing, setEditing] = useState(null);
 
@@ -94,7 +94,7 @@ export default function Watchlist({ sites, profiles, onChange }) {
         </table>
       </div>
 
-      {editing && <WatchModal item={editing} sites={sites} profiles={profiles} onClose={() => { setEditing(null); load(); }} />}
+      {editing && <WatchModal item={editing} sites={sites} profiles={profiles} browsers={browsers} onClose={() => { setEditing(null); load(); }} />}
     </div>
   );
 }
@@ -105,7 +105,7 @@ const BUTTON_TYPE_LABELS = {
   waitlist: "Waitlist / Notify Me",
 };
 
-function WatchModal({ item, sites, profiles, onClose }) {
+function WatchModal({ item, sites, profiles, browsers, onClose }) {
   const [f, setF] = useState({
     name: item.name || "",
     site: item.site || (sites?.sites?.[0] || "walmart"),
@@ -116,6 +116,7 @@ function WatchModal({ item, sites, profiles, onClose }) {
     max_price: item.max_price ?? "",
     quantity: item.quantity ?? 1,
     profile_id: item.profile_id || "",
+    browser_id: item.browser_id || "",
     button_types: Array.isArray(item.button_types) && item.button_types.length ? item.button_types : ["cart"],
   });
   const toggleBtype = (b) => {
@@ -135,8 +136,8 @@ function WatchModal({ item, sites, profiles, onClose }) {
         profile_id: f.profile_id || null,
         button_types: f.button_types,
       };
-      if (item.id) await api.patch(`/watch/${item.id}`, body);
-      else await api.post(`/watch`, body);
+      if (item.id) await api.patch(`/watch/${item.id}`, {...body, browser_id: f.browser_id || null});
+      else await api.post(`/watch`, {...body, browser_id: f.browser_id || null});
       toast.success("Saved");
       onClose();
     } catch (e) { toast.error(String(e.response?.data?.detail || e.message)); }
@@ -196,6 +197,12 @@ function WatchModal({ item, sites, profiles, onClose }) {
             <select className={field} value={f.profile_id} onChange={(e) => setF({ ...f, profile_id: e.target.value })}>
               <option value="">— none —</option>
               {profiles?.map((p) => <option key={p.id} value={p.id}>{p.label}</option>)}
+            </select>
+          </label>
+          <label><div className="text-[10px] text-[#A1A1AA] uppercase tracking-wider mb-1">Browser</div>
+            <select data-testid="watch-browser-select" className={field} value={f.browser_id} onChange={(e) => setF({ ...f, browser_id: e.target.value })}>
+              <option value="">— default —</option>
+              {browsers?.map((b) => <option key={b.id} value={b.id}>{b.name}{b.is_default ? " (default)" : ""}</option>)}
             </select>
           </label>
           <label className="col-span-2 flex items-center gap-2"><input type="checkbox" checked={f.active} onChange={(e) => setF({ ...f, active: e.target.checked })} /> <span className="text-xs text-[#A1A1AA]">Active (included in Start All)</span></label>

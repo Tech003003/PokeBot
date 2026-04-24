@@ -63,6 +63,7 @@ class WatchIn(BaseModel):
     quantity: int = 1
     profile_id: Optional[str] = None
     button_types: list[str] = ["cart"]
+    browser_id: Optional[str] = None
 
 
 class WatchPatch(BaseModel):
@@ -76,6 +77,7 @@ class WatchPatch(BaseModel):
     quantity: Optional[int] = None
     profile_id: Optional[str] = None
     button_types: Optional[list[str]] = None
+    browser_id: Optional[str] = None
 
 
 class ProfileIn(BaseModel):
@@ -107,6 +109,7 @@ class DropIn(BaseModel):
     purchase_mode: str = "cart"
     profile_id: Optional[str] = None
     duration_min: int = 15
+    browser_id: Optional[str] = None
 
 
 class SettingsPatch(BaseModel):
@@ -132,6 +135,25 @@ class SettingsPatch(BaseModel):
 
 class ConnectIn(BaseModel):
     cdp_url: Optional[str] = None
+    browser_id: Optional[str] = None
+
+
+class BrowserIn(BaseModel):
+    name: str
+    cdp_url: str = "http://127.0.0.1:9222"
+    user_data_dir: str = ""   # Windows path; used by the launch helper
+    proxy: str = ""           # optional --proxy-server=... URL
+    max_workers: int = 0      # 0 = share the global concurrent_workers cap
+    is_default: bool = False
+
+
+class BrowserPatch(BaseModel):
+    name: Optional[str] = None
+    cdp_url: Optional[str] = None
+    user_data_dir: Optional[str] = None
+    proxy: Optional[str] = None
+    max_workers: Optional[int] = None
+    is_default: Optional[bool] = None
 
 
 # ------ Helpers ------
@@ -183,22 +205,23 @@ async def get_status():
 # ------ Brave ------
 @api.post("/brave/connect")
 async def brave_connect(body: ConnectIn):
+    # Legacy single-browser shim: writing `cdp_url` also updates the default
+    # browser row so both "Settings > CDP URL" and the Browsers tab stay in sync.
     if body.cdp_url:
         await db.set_setting("cdp_url", body.cdp_url)
-    return await engine.connect_brave(body.cdp_url)
+        default_row = await db.get_default_browser()
+        if default_row:
+            await db.update_browser(default_row["id"], {"cdp_url": body.cdp_url})
+    return await engine.connect_brave(cdp_url=body.cdp_url, browser_id=body.browser_id)
 
 
 @api.post("/brave/disconnect")
-async def brave_disconnect():
-    return await engine.disconnect_brave()
+async def brave_disconnect(browser_id: Optional[str] = None):
+    return await engine.disconnect_brave(browser_id=browser_id)
 
 
-@api.post("/brave/launch")
-async def brave_launch():
-    """Launch Brave with --remote-debugging-port=9222 locally. Only works when
-    TechBot is running on the user's own PC (obviously)."""
+def _resolve_brave_exe() -> Optional[str]:
     if platform.system() != "Windows":
-        # Best-effort for non-Windows dev/testing
         exe_candidates = [
             "brave", "brave-browser",
             "/Applications/Brave Browser.app/Contents/MacOS/Brave Browser",
@@ -209,33 +232,120 @@ async def brave_launch():
             r"C:\Program Files (x86)\BraveSoftware\Brave-Browser\Application\brave.exe",
             os.path.expandvars(r"%LOCALAPPDATA%\BraveSoftware\Brave-Browser\Application\brave.exe"),
         ]
-    brave_exe = next((p for p in exe_candidates if p and (shutil.which(p) or os.path.isfile(p))), None)
+    return next((p for p in exe_candidates if p and (shutil.which(p) or os.path.isfile(p))), None)
+
+
+def _launch_brave_process(port: int, profile_dir: str, proxy: str = "") -> dict:
+    """Spawn a detached Brave process listening on `port` with its own profile.
+    Raises HTTPException on failure so callers can surface it to the UI."""
+    brave_exe = _resolve_brave_exe()
     if not brave_exe:
         raise HTTPException(404, "brave.exe not found at default install locations")
-
-    # Dedicated profile folder so we don't touch the user's main Brave data
-    profile_dir = os.path.join(os.path.expanduser("~"), "TechBotBraveSession")
     os.makedirs(profile_dir, exist_ok=True)
-
     args = [
         brave_exe,
-        "--remote-debugging-port=9222",
+        f"--remote-debugging-port={port}",
         f"--user-data-dir={profile_dir}",
     ]
+    if proxy:
+        args.append(f"--proxy-server={proxy}")
+    kwargs = {"stdout": subprocess.DEVNULL, "stderr": subprocess.DEVNULL,
+              "stdin": subprocess.DEVNULL, "close_fds": True}
+    if platform.system() == "Windows":
+        DETACHED = 0x00000008  # DETACHED_PROCESS
+        CREATE_NEW_GROUP = 0x00000200
+        kwargs["creationflags"] = DETACHED | CREATE_NEW_GROUP
+    else:
+        kwargs["start_new_session"] = True
     try:
-        kwargs = {"stdout": subprocess.DEVNULL, "stderr": subprocess.DEVNULL,
-                  "stdin": subprocess.DEVNULL, "close_fds": True}
-        if platform.system() == "Windows":
-            DETACHED = 0x00000008  # DETACHED_PROCESS
-            CREATE_NEW_GROUP = 0x00000200
-            kwargs["creationflags"] = DETACHED | CREATE_NEW_GROUP
-        else:
-            kwargs["start_new_session"] = True
         subprocess.Popen(args, **kwargs)
-        return {"ok": True, "brave_exe": brave_exe, "profile_dir": profile_dir,
-                "message": "Brave launched with debug port 9222. Log into retailers inside it, then click Connect Brave."}
     except Exception as e:
         raise HTTPException(500, f"Failed to launch Brave: {str(e)[:200]}")
+    return {"ok": True, "brave_exe": brave_exe, "port": port, "profile_dir": profile_dir,
+            "proxy": proxy,
+            "message": f"Brave launched on port {port}. Sign in to retailers inside it, then click Connect."}
+
+
+@api.post("/brave/launch")
+async def brave_launch():
+    """Legacy one-click launch of the default Brave on port 9222. Kept so existing
+    buttons still work; for per-browser launching use /api/browsers/{id}/launch."""
+    profile_dir = os.path.join(os.path.expanduser("~"), "TechBotBraveSession")
+    return _launch_brave_process(9222, profile_dir)
+
+
+# ------ Browsers ------
+def _parse_cdp_port(cdp_url: str) -> int:
+    # accepts http://host:port or just host:port; defaults to 9222.
+    try:
+        host_port = cdp_url.split("://", 1)[-1]
+        port_part = host_port.split(":")[-1].split("/")[0]
+        return int(port_part)
+    except Exception:
+        return 9222
+
+
+@api.get("/browsers")
+async def browsers_list():
+    rows = await db.list_browsers()
+    # Annotate each row with its live connection state so the UI can show a
+    # green dot next to connected sessions.
+    live = {b["browser_id"] for b in (await engine.status())["browsers"] if b.get("connected")}
+    for r in rows:
+        r["connected"] = r["id"] in live
+    return rows
+
+
+@api.post("/browsers")
+async def browsers_create(body: BrowserIn):
+    data = _bool_fix(body.model_dump())
+    return await db.create_browser(data)
+
+
+@api.patch("/browsers/{bid}")
+async def browsers_update(bid: str, body: BrowserPatch):
+    patch = {k: v for k, v in body.model_dump().items() if v is not None}
+    patch = _bool_fix(patch)
+    row = await db.update_browser(bid, patch)
+    if not row:
+        raise HTTPException(404, "browser not found")
+    return row
+
+
+@api.delete("/browsers/{bid}")
+async def browsers_delete(bid: str):
+    row = await db.get_browser(bid)
+    if not row:
+        raise HTTPException(404)
+    # Disconnect any live session tied to this row before dropping it.
+    await engine.disconnect_brave(browser_id=bid)
+    await db.delete_browser(bid)
+    return {"ok": True}
+
+
+@api.post("/browsers/{bid}/connect")
+async def browsers_connect(bid: str):
+    return await engine.connect_brave(browser_id=bid)
+
+
+@api.post("/browsers/{bid}/disconnect")
+async def browsers_disconnect(bid: str):
+    return await engine.disconnect_brave(browser_id=bid)
+
+
+@api.post("/browsers/{bid}/launch")
+async def browsers_launch(bid: str):
+    """Spawn a Brave process for this row. Uses the row's `cdp_url` port,
+    `user_data_dir`, and optional `proxy`. Windows-only for the spawn itself —
+    on other OSes we still try best-effort via the resolved binary."""
+    row = await db.get_browser(bid)
+    if not row:
+        raise HTTPException(404, "browser not found")
+    port = _parse_cdp_port(row.get("cdp_url") or "")
+    profile_dir = row.get("user_data_dir") or os.path.join(
+        os.path.expanduser("~"), f"TechBotBrave_{row['name'].replace(' ', '_')}"
+    )
+    return _launch_brave_process(port, profile_dir, row.get("proxy") or "")
 
 
 # ------ Watchlist ------

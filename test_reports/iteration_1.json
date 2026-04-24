@@ -1,0 +1,44 @@
+{
+  "summary": "Backend-only integration testing of the multi-account / proxy-browser feature. Added 16 pytest cases in /app/backend/tests/test_browsers_api.py covering /api/browsers CRUD + default-flag semantics, connect/disconnect/launch cloud behaviour, browser_id persistence on /api/watch and /api/drops, /api/status.browsers, legacy /api/brave/connect default-row sync, and regression on meta/profiles/settings/watch start-stop. All 16 new tests pass and all 39 pre-existing tests still pass (55/55 green).",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "DELETE /api/browsers/{id}", "issue": "API allows deleting the seeded Default row (returns 200). Per problem statement this is acceptable because UI enforces it, but a server-side guard + clearer error would be safer."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_browsers_api.py",
+    "/app/test_reports/pytest/browsers_api.xml",
+    "/app/test_reports/pytest/full_suite.xml"
+  ],
+  "action_items": [
+    "(Optional / low priority) Consider blocking DELETE of the is_default=1 browser row at the API layer and returning 400 with a clear message, instead of relying solely on UI guard.",
+    "(Optional) /api/browsers/{id}/connect currently returns 200 with connected:false and a reason on failure — good. Confirm the same contract is used by the frontend so the UI can show the error string."
+  ],
+  "critical_code_review_comments": [
+    "server.py is 592 lines — approaching the 700-line split threshold; consider splitting routes into modules (browsers, watch, drops, profiles, settings) as the file keeps growing.",
+    "DELETE /api/browsers/{bid} does not prevent removing the last/default row. If both UI protections are bypassed (direct API), the default seed rule re-creates one only on next init_db, so a user could end up with zero browser rows and Watchlist/Drops referencing a deleted browser_id.",
+    "update_browser does not validate that is_default cannot be set to false on the only remaining default — toggling is_default:false on the sole default leaves the system with zero defaults. Not covered by this test since PATCH with is_default=false was not in scope, but worth a guard.",
+    "browsers/{id}/launch uses subprocess.Popen synchronously inside an async handler; tiny risk of event-loop blocking on slow FS. Low priority given it only runs on desktop.",
+    "_parse_cdp_port silently falls back to 9222 on any parse error — may mask user typos in cdp_url. Consider raising 400 on bad input.",
+    "No pagination / limit on /api/browsers, /api/watch, /api/drops — acceptable for a local scalper bot but worth noting."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_browsers_api.py (NEW)"
+  ],
+  "success_rate": {
+    "backend": "100% (55/55 pytest, 16/16 new feature tests)",
+    "frontend": "not tested (backend-only request)"
+  },
+  "test_credentials": "none required",
+  "seed_data_creation": "Every test row is prefixed TEST_ and deleted in teardown. The auto-seeded Default browser row is preserved. The test that flips is_default restores it back to the original default before deleting the TEST row.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Reusable pytest file /app/backend/tests/test_browsers_api.py exercises the full /api/browsers surface + browser_id propagation via the public REACT_APP_BACKEND_URL. It is idempotent, cleans up its own rows, and should be run alongside the existing suite (`cd /app/backend && python -m pytest tests/ -q`). Brave is NOT available in the cloud, so connect returns connected:false with a reason and launch returns 404 — both expected and asserted.",
+  "rca of the issue": "N/A — no bugs found. Feature works as specified across all 14 enumerated scenarios in the review request."
+}
