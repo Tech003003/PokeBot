@@ -7,7 +7,7 @@ cd ..
 
 echo.
 echo ==========================================
-echo   TechBot Command Center - First-time setup
+echo   TechBot Command Center - starting up
 echo ==========================================
 echo.
 
@@ -23,26 +23,41 @@ if not exist ".venv\" (
 )
 call .venv\Scripts\activate.bat
 
-echo [3/5] Installing Python deps (this can take a minute)...
+echo [3/5] Installing/updating Python deps...
 python -m pip install --upgrade pip >nul
 pip install -r backend\requirements.txt || goto pip_fail
 
-echo        Installing Playwright Chromium driver (first run only)...
-python -m playwright install chromium
+if not exist "ms-playwright\" (
+    echo        Installing Playwright Chromium driver (first run only)...
+    python -m playwright install chromium
+)
 
-if exist "frontend\build\index.html" goto skip_frontend
+rem ----- Decide whether to rebuild the frontend -----
+set REBUILD=0
+if not exist "frontend\build\index.html" set REBUILD=1
+rem If any src file is newer than the built bundle, rebuild
+if "%REBUILD%"=="0" (
+    for /f "delims=" %%f in ('dir /s /b /o:-d "frontend\src\*" 2^>nul') do (
+        for %%g in ("frontend\build\index.html") do (
+            if "%%~tf" gtr "%%~tg" set REBUILD=1
+        )
+        goto _checkdone
+    )
+    :_checkdone
+)
 
-echo [4/5] Building frontend (first run only, takes a few minutes)...
+if "%REBUILD%"=="1" goto do_build
+echo [4/5] Frontend build up to date, skipping rebuild.
+goto run
+
+:do_build
+echo [4/5] Building frontend (first run or source changed)...
 where yarn >nul 2>&1 || call corepack enable >nul 2>&1
 where yarn >nul 2>&1 || call npm install -g yarn
 pushd frontend
 call yarn install || call npm install
 call yarn build || call npm run build
 popd
-goto run
-
-:skip_frontend
-echo [4/5] Frontend build found, skipping.
 
 :run
 echo.
@@ -55,21 +70,18 @@ exit /b 0
 
 :no_python
 echo.
-echo ERROR: Python 3.10+ not found.
-echo    Install from https://www.python.org/downloads/ and TICK "Add python.exe to PATH" on the first screen.
+echo ERROR: Python 3.10+ not found. Install from https://www.python.org/downloads/ and TICK "Add python.exe to PATH".
 pause
 exit /b 1
 
 :no_node
 echo.
-echo ERROR: Node.js not found.
-echo    Install the LTS build from https://nodejs.org/ , then re-run this script.
+echo ERROR: Node.js not found. Install the LTS build from https://nodejs.org/.
 pause
 exit /b 1
 
 :pip_fail
 echo.
-echo ERROR: pip install failed. See messages above.
-echo    Common fix: delete the .venv folder and run Start.bat again.
+echo ERROR: pip install failed. See messages above. Common fix: delete the .venv folder and re-run.
 pause
 exit /b 1
