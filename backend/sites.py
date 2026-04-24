@@ -47,15 +47,13 @@ _CART_URLS = {
 
 _SELECTORS = {
     "walmart": [
-        "button[data-automation-id='atc']",
-        "button[data-automation-id='add-to-cart-button']",
-        "[data-tl-id='ProductPrimaryCTA-cta_add_to_cart_button']",
-        "button:has-text('Add to cart'):not([disabled])",
+        "button[data-automation-id='atc']:not([disabled])",
+        "button[data-automation-id='add-to-cart-button']:not([disabled])",
+        "[data-tl-id='ProductPrimaryCTA-cta_add_to_cart_button']:not([disabled])",
     ],
     "pokemoncenter": [
         "button[data-testid='add-to-cart-button']:not([disabled])",
-        "button:has-text('Add to Cart'):not([disabled])",
-        ".add-to-cart:not([disabled])",
+        "[data-testid='add-to-cart'] button:not([disabled])",
     ],
     "amazon": [
         "#add-to-cart-button:not([disabled])",
@@ -65,29 +63,33 @@ _SELECTORS = {
     "target": [
         "button[data-test='shipItButton']:not([disabled])",
         "button[data-test='orderPickupButton']:not([disabled])",
-        "button:has-text('Add to cart'):not([disabled])",
+        "button[data-test='@web/site-top-of-funnel/ProductDetailAddToCartButton']:not([disabled])",
+        "button[data-test='addToCartButton']:not([disabled])",
+        "[data-test='buy-box'] button:has-text('Add to cart'):not([disabled])",
+        "[data-test='product-details'] button:has-text('Add to cart'):not([disabled])",
     ],
     "bestbuy": [
         "button.add-to-cart-button:not([disabled])",
         "button[data-button-state='ADD_TO_CART']:not([disabled])",
-        "button:has-text('Add to Cart'):not([disabled])",
+        ".sku-page button.btn-primary:has-text('Add to Cart'):not([disabled])",
     ],
     "gamestop": [
         "button.add-to-cart:not([disabled])",
-        "button:has-text('Add to Cart'):not([disabled])",
+        "[data-pid] button.add-to-cart:not([disabled])",
+        ".product-detail button:has-text('Add to Cart'):not([disabled])",
     ],
     "costco": [
         "input[value='Add to Cart']:not([disabled])",
-        "button:has-text('Add to Cart'):not([disabled])",
         "#add-to-cart-btn:not([disabled])",
+        ".product-info-wrapper button:has-text('Add to Cart'):not([disabled])",
     ],
     "samsclub": [
         "button[data-testid='add-to-cart-button']:not([disabled])",
-        "button:has-text('Add to cart'):not([disabled])",
+        ".sc-add-to-cart button:not([disabled])",
     ],
     "tcgplayer": [
-        "button:has-text('Add to Cart'):not([disabled])",
         "button.btn-add-to-cart:not([disabled])",
+        ".product-details button:has-text('Add to Cart'):not([disabled])",
     ],
 }
 
