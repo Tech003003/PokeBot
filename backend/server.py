@@ -306,6 +306,15 @@ async def browsers_create(body: BrowserIn):
 async def browsers_update(bid: str, body: BrowserPatch):
     patch = {k: v for k, v in body.model_dump().items() if v is not None}
     patch = _bool_fix(patch)
+    # Guard: refuse to unset the default flag if this is the only default row.
+    # Without this, a user could end up with zero defaults and orphan the
+    # fallback resolution used by _resolve_browser().
+    if patch.get("is_default") == 0:
+        current = await db.get_browser(bid)
+        if current and current.get("is_default"):
+            others = [b for b in await db.list_browsers() if b["id"] != bid and b.get("is_default")]
+            if not others:
+                raise HTTPException(400, "Cannot unset default on the only default browser. Promote another row first.")
     row = await db.update_browser(bid, patch)
     if not row:
         raise HTTPException(404, "browser not found")
@@ -317,6 +326,11 @@ async def browsers_delete(bid: str):
     row = await db.get_browser(bid)
     if not row:
         raise HTTPException(404)
+    # Forbid deleting the default browser — watchlist items / drops rely on a
+    # default existing as fallback when their own browser_id is null. The UI
+    # already disables the delete button but we enforce here too.
+    if row.get("is_default"):
+        raise HTTPException(400, "Cannot delete the default browser. Promote another row to default first.")
     # Disconnect any live session tied to this row before dropping it.
     await engine.disconnect_brave(browser_id=bid)
     await db.delete_browser(bid)
