@@ -25,6 +25,12 @@ inclusive local desktop app with:
 - `local/launch.py`   — Single-process launcher that serves `frontend/build` + starts uvicorn + opens browser
 - `local/Start.bat`, `local/Start-Brave.bat`, `local/README.md` — Windows bootstrapping
 
+## What's been implemented (2026-02 patch)
+- **[P0 FIX] Wrong-item cart bug (Issue #1)**: rewrote `_SELECTORS` in `backend/sites.py` for all 9 retailers — every ATC selector is now strictly scoped to the primary buy-box / PDP container. Removed the bare `button[data-test='addToCartButton']` and every generic `button:has-text('Add to cart')` fallback that was letting Target's "related items" carousel trigger purchases (the plushie bug).
+- **[P0 FIX] False "Purchased" status (Issue #2)**: replaced the negative-only `verify_atc_success` with a positive-confirmation check that waits up to 3 s for EITHER a retailer-specific success modal/sidecart OR a header cart-count increment (N → N+1). Short-circuits to failure on known error banners. New helpers: `get_cart_count`, `_CART_COUNT_SELECTORS`, `_ATC_SUCCESS_SELECTORS`.
+- **Engine wiring**: `_monitor_item` now captures `pre_cart_count` before clicking ATC and passes it to the verifier. Drop `hammer` does the same before declaring a `DROP_HIT`.
+- **Regression tests**: `backend/tests/test_selectors_scoping.py` (28 assertions — one per retailer, guards forbidden unscoped selectors) and `backend/tests/test_verify_atc_success.py` (7 behavioural tests with a lightweight Playwright page fake). All 35 tests pass.
+
 ## What's been implemented (2026-04-23)
 - Full CRUD for Watchlist, Profiles (with card masking), Drops, Settings
 - Brave CDP connect/disconnect controls in header

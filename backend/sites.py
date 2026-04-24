@@ -45,51 +45,89 @@ _CART_URLS = {
     "tcgplayer": "https://shop.tcgplayer.com/cart",
 }
 
+# CRITICAL: Every selector below MUST be scoped to the primary product buy-box
+# container. Generic selectors (like a bare `button[data-test='addToCartButton']`
+# or `button:has-text('Add to cart')`) will match buttons inside "related items"
+# / "you might also like" carousels on out-of-stock pages and cause the bot to
+# purchase the wrong product (see Issue #1 / plushie bug on Target).
+# If a retailer ships a redesign, prefer adding a NEW scoped selector over
+# widening an existing one.
 _SELECTORS = {
     "walmart": [
-        "button[data-automation-id='atc']:not([disabled])",
-        "button[data-automation-id='add-to-cart-button']:not([disabled])",
+        # Walmart primary buy-box container is `div[data-testid='add-to-cart-section']`
+        # or the atf-content container. The `atc` automation-id on the primary CTA
+        # is unique to the main product on the PDP; carousel cards use a different id.
+        "div[data-testid='add-to-cart-section'] button[data-automation-id='atc']:not([disabled])",
+        "div[data-testid='atf-content'] button[data-automation-id='atc']:not([disabled])",
         "[data-tl-id='ProductPrimaryCTA-cta_add_to_cart_button']:not([disabled])",
     ],
     "pokemoncenter": [
-        "button[data-testid='add-to-cart-button']:not([disabled])",
-        "[data-testid='add-to-cart'] button:not([disabled])",
+        # Main PDP buy-box only. Recommendation tiles use their own `product-card-*`
+        # testids and will NOT match this scope.
+        "[data-testid='pdp-buy-box'] button[data-testid='add-to-cart-button']:not([disabled])",
+        "[data-testid='product-form'] button[data-testid='add-to-cart-button']:not([disabled])",
+        "form[data-testid='product-form'] button[type='submit']:has-text('Add to Cart'):not([disabled])",
     ],
     "amazon": [
+        # Amazon uses strict unique IDs for the main buy-box ATC button.
         "#add-to-cart-button:not([disabled])",
         "#add-to-cart-button-ubb:not([disabled])",
+        "input#add-to-cart-button:not([disabled])",
         "input[name='submit.add-to-cart']:not([disabled])",
     ],
     "target": [
+        # Target's PDP primary CTA uses unique data-test identifiers that are
+        # NEVER used in "related items" or "also bought" carousels. We strictly
+        # whitelist those. Do NOT add `button[data-test='addToCartButton']` — that
+        # id ALSO appears on carousel product cards and will buy a plushie.
         "button[data-test='shipItButton']:not([disabled])",
         "button[data-test='orderPickupButton']:not([disabled])",
         "button[data-test='@web/site-top-of-funnel/ProductDetailAddToCartButton']:not([disabled])",
-        "button[data-test='addToCartButton']:not([disabled])",
-        "[data-test='buy-box'] button:has-text('Add to cart'):not([disabled])",
-        "[data-test='product-details'] button:has-text('Add to cart'):not([disabled])",
+        "[data-test='buy-box-actions'] button[data-test='shipItButton']:not([disabled])",
+        "[data-test='buy-box-actions'] button[data-test='orderPickupButton']:not([disabled])",
+        "[data-test='buy-box-actions'] button[data-test='addToCartButton']:not([disabled])",
     ],
     "bestbuy": [
-        "button.add-to-cart-button:not([disabled])",
-        "button[data-button-state='ADD_TO_CART']:not([disabled])",
-        ".sku-page button.btn-primary:has-text('Add to Cart'):not([disabled])",
+        # Scope to the main SKU/fulfillment area. `.add-to-cart-button` and the
+        # data-button-state are also used inside recommendation strips, so we
+        # require an ancestor .sku-page / .fulfillment-add-to-cart-button container.
+        ".sku-page .fulfillment-add-to-cart-button button:not([disabled])",
+        ".sku-page button.add-to-cart-button:not([disabled])",
+        ".sku-page button[data-button-state='ADD_TO_CART']:not([disabled])",
+        ".fulfillment-add-to-cart-button button[data-button-state='ADD_TO_CART']:not([disabled])",
     ],
     "gamestop": [
-        "button.add-to-cart:not([disabled])",
-        "[data-pid] button.add-to-cart:not([disabled])",
-        ".product-detail button:has-text('Add to Cart'):not([disabled])",
+        # GameStop's PDP wraps the primary CTA in `.product-detail` or the
+        # `.cart-and-ipay` block. Bare `button.add-to-cart` would also match the
+        # buttons inside the "People also bought" strip.
+        ".product-detail .cart-and-ipay button.add-to-cart:not([disabled])",
+        ".product-detail .add-to-cart-global:not([disabled])",
+        ".product-detail button.add-to-cart-global:not([disabled])",
+        ".pdp-main button.add-to-cart:not([disabled])",
     ],
     "costco": [
-        "input[value='Add to Cart']:not([disabled])",
+        # Costco's PDP uses `#add-to-cart-btn` (unique ID) or a button inside
+        # `.product-info-wrapper`. Generic `input[value='Add to Cart']` fallback
+        # was removed — too prone to matching recommendation widgets.
         "#add-to-cart-btn:not([disabled])",
-        ".product-info-wrapper button:has-text('Add to Cart'):not([disabled])",
+        ".product-info-wrapper #add-to-cart-btn:not([disabled])",
+        ".product-info-wrapper button[automation-id='addToCartButton']:not([disabled])",
+        ".product-info-wrapper input[value='Add to Cart']:not([disabled])",
     ],
     "samsclub": [
-        "button[data-testid='add-to-cart-button']:not([disabled])",
+        # Sam's Club PDP is wrapped in `[data-testid='pdp-buy-box']` /
+        # `.sc-add-to-cart`. The same testid appears on carousel cards; scoping
+        # to the buy-box container avoids that collision.
+        "[data-testid='pdp-buy-box'] button[data-testid='add-to-cart-button']:not([disabled])",
+        ".pdp-main [data-testid='add-to-cart-button']:not([disabled])",
         ".sc-add-to-cart button:not([disabled])",
     ],
     "tcgplayer": [
-        "button.btn-add-to-cart:not([disabled])",
-        ".product-details button:has-text('Add to Cart'):not([disabled])",
+        # TCGPlayer's PDP is `.product-details`; the shop listing pages have
+        # many per-row add-to-cart buttons, so we scope strictly.
+        ".product-details .add-to-cart button:not([disabled])",
+        ".product-details button.btn-add-to-cart:not([disabled])",
+        ".product-details__price-and-actions button:has-text('Add to Cart'):not([disabled])",
     ],
 }
 
@@ -229,43 +267,205 @@ _ATC_ERROR_CLOSE = [
     "[data-test='modalCloseButton']",
 ]
 
+# Header cart-count badge per retailer. If the count is visible pre-click and
+# increments post-click, that's the strongest positive confirmation we have.
+_CART_COUNT_SELECTORS = {
+    "walmart": [
+        "a[link-identifier='cartNavIcon'] [data-automation-id='cart-item-count']",
+        "a[link-identifier='cartNavIcon'] span[aria-hidden='true']",
+        "[data-testid='cart-icon'] [data-automation-id='cart-item-count']",
+    ],
+    "pokemoncenter": [
+        "[data-testid='minicart-count']",
+        "[data-testid='cart-count']",
+        "a[href*='/cart'] [class*='count']",
+    ],
+    "amazon": [
+        "#nav-cart-count",
+        "span#nav-cart-count",
+    ],
+    "target": [
+        "a[data-test='@web/CartLink'] [data-test='@web/CartIcon/countBubble']",
+        "a[data-test='@web/CartLink'] span[aria-hidden='true']",
+        "[data-test='@web/CartIcon/countBubble']",
+    ],
+    "bestbuy": [
+        ".shop-cart-icon .cart-count",
+        "a[data-track='Cart'] .cart-count",
+        "#cart-count",
+    ],
+    "gamestop": [
+        ".minicart-quantity",
+        ".minicart .minicart-quantity",
+        "a.minicart-link .minicart-quantity",
+    ],
+    "costco": [
+        "#cart-d span.cart-count",
+        "#cart-d .count",
+        ".cart-count",
+    ],
+    "samsclub": [
+        "[data-testid='cart-count']",
+        "a[href*='/cart'] [data-testid*='count']",
+    ],
+    "tcgplayer": [
+        ".header-cart__count",
+        "a[href*='/cart'] .count",
+    ],
+}
 
-async def verify_atc_success(page, site: str, logger, wait_s: float = 2.5) -> bool:
-    """Wait for an error modal/banner to appear after an ATC click. Returns False
-    if rejected, True if the click looks successful. Closes the modal on the way
-    out so the next poll gets a clean page."""
-    sigs = _ATC_ERROR_SIGNATURES.get(site, [])
-    if not sigs:
-        await asyncio.sleep(0.5)
-        return True
+# Positive success indicators per retailer (sidecart, flyout, success toast).
+# Presence of ANY of these after a click is treated as confirmed ATC success,
+# independent of the cart-count check.
+_ATC_SUCCESS_SELECTORS = {
+    "walmart": [
+        "div[data-testid='atc-sidebar']",
+        "div[aria-label='Added to cart']",
+        "[data-automation-id='atc-confirmation']",
+    ],
+    "pokemoncenter": [
+        "[data-testid='added-to-cart-modal']",
+        "[data-testid='cart-notification']",
+        "div[role='status']:has-text('added to your cart')",
+    ],
+    "amazon": [
+        "#huc-v2-order-row-confirm-text",
+        "#attachSiNoCoverage",
+        "#NATC_SMART_WAGON_CONF_MSG_SUCCESS",
+        "div:has-text('Added to Cart')",
+    ],
+    "target": [
+        "div[aria-label='Added to cart']",
+        "[data-test='addedToCartModal']",
+        "div[role='dialog']:has-text('Added to cart')",
+    ],
+    "bestbuy": [
+        ".added-to-cart-notification",
+        "div[role='status']:has-text('Added to cart')",
+        ".cart-flyout",
+    ],
+    "gamestop": [
+        ".add-to-cart-messages:has-text('added to your cart')",
+        ".minicart-flyout:visible",
+    ],
+    "costco": [
+        "#added-to-cart-modal",
+        "div.modal-content:has-text('Added to Your Cart')",
+    ],
+    "samsclub": [
+        "[data-testid='added-to-cart-modal']",
+        "div[role='dialog']:has-text('Added to cart')",
+    ],
+    "tcgplayer": [
+        ".cart-flyout:visible",
+        "div:has-text('Added to Cart')",
+    ],
+}
 
-    # Build a single regex that matches any of this site's rejection phrases
+
+async def get_cart_count(page, site: str) -> Optional[int]:
+    """Best-effort: read the header mini-cart badge count. Returns None when the
+    badge isn't rendered (e.g. empty cart often hides the badge on Walmart/Target)
+    or the page hasn't loaded it yet. Callers must treat None as 'unknown', not 0."""
     import re
-    pattern = "|".join(re.escape(s) for s in sigs)
-    try:
-        error_el = page.get_by_text(re.compile(pattern, re.IGNORECASE)).first
-        # Wait up to wait_s for the modal to render
-        if await error_el.is_visible(timeout=int(wait_s * 1000)):
-            matched = ""
+    for sel in _CART_COUNT_SELECTORS.get(site, []):
+        try:
+            el = page.locator(sel).first
+            if not await el.count():
+                continue
+            txt = (await el.text_content(timeout=500)) or ""
+            txt = txt.strip()
+            if not txt:
+                continue
+            m = re.search(r"\d+", txt)
+            if m:
+                return int(m.group(0))
+        except Exception:
+            continue
+    return None
+
+
+async def verify_atc_success(page, site: str, logger, pre_cart_count: Optional[int] = None,
+                             wait_s: float = 3.0) -> bool:
+    """Positive-confirmation ATC check.
+
+    Returns True only when we see a concrete success signal:
+        (a) the retailer's success modal / sidecart / toast appears, OR
+        (b) the header cart-count badge increments above `pre_cart_count`.
+
+    Returns False when:
+        * a known retailer error signature appears (short-circuit), OR
+        * no positive signal is seen within `wait_s` (timeout → retry on next poll).
+
+    Callers pass the cart count they read BEFORE clicking so we can detect the
+    badge going from N → N+1 even when the site never shows a modal.
+    """
+    import re
+    label = SITE_LABELS.get(site, site.upper())
+    success_selectors = _ATC_SUCCESS_SELECTORS.get(site, [])
+    error_sigs = _ATC_ERROR_SIGNATURES.get(site, [])
+    error_pattern = None
+    if error_sigs:
+        error_pattern = re.compile("|".join(re.escape(s) for s in error_sigs), re.IGNORECASE)
+
+    deadline = asyncio.get_event_loop().time() + wait_s
+    poll_interval = 0.2
+
+    while asyncio.get_event_loop().time() < deadline:
+        # (1) Early-fail on any known error banner.
+        if error_pattern is not None:
             try:
-                matched = (await error_el.text_content(timeout=500)) or ""
+                err_el = page.get_by_text(error_pattern).first
+                if await err_el.is_visible(timeout=150):
+                    matched = ""
+                    try:
+                        matched = (await err_el.text_content(timeout=300)) or ""
+                    except Exception:
+                        pass
+                    logger("WARN", f"[{label}] cart rejected: '{matched.strip()[:60]}'")
+                    for sel in _ATC_ERROR_CLOSE:
+                        try:
+                            el = page.locator(sel).first
+                            if await el.is_visible(timeout=300):
+                                await el.click(timeout=1200)
+                                await asyncio.sleep(0.2)
+                                break
+                        except Exception:
+                            continue
+                    return False
             except Exception:
                 pass
-            logger("WARN", f"[{SITE_LABELS.get(site, site.upper())}] cart rejected: '{matched[:60]}'")
-            # Best-effort close the modal so the next poll can retry
-            for sel in _ATC_ERROR_CLOSE:
-                try:
-                    el = page.locator(sel).first
-                    if await el.is_visible(timeout=400):
-                        await el.click(timeout=1500)
-                        await asyncio.sleep(0.3)
-                        break
-                except Exception:
-                    continue
-            return False
-    except Exception:
-        pass
-    return True
+
+        # (2) Positive: retailer-specific success modal/toast/sidecart.
+        for sel in success_selectors:
+            try:
+                el = page.locator(sel).first
+                if await el.is_visible(timeout=150):
+                    logger("SUCCESS", f"[{label}] ATC confirmed via success modal")
+                    return True
+            except Exception:
+                continue
+
+        # (3) Positive: header cart-count badge incremented.
+        try:
+            cur = await get_cart_count(page, site)
+            if cur is not None:
+                if pre_cart_count is None:
+                    # Badge wasn't visible pre-click (likely empty cart) but now
+                    # shows a count >= 1 — treat as success.
+                    if cur >= 1:
+                        logger("SUCCESS", f"[{label}] ATC confirmed: cart badge now {cur}")
+                        return True
+                elif cur > pre_cart_count:
+                    logger("SUCCESS", f"[{label}] ATC confirmed: cart {pre_cart_count} → {cur}")
+                    return True
+        except Exception:
+            pass
+
+        await asyncio.sleep(poll_interval)
+
+    logger("WARN", f"[{label}] ATC unconfirmed after {wait_s:.1f}s (no success modal, no cart increment) — treating as failure")
+    return False
 
 # Checkout / place-order selectors per site (best-effort; retailers change these frequently)
 _CHECKOUT_BTN = {

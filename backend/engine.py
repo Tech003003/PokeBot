@@ -294,6 +294,16 @@ class MonitorEngine:
                     # Resilient purchase flow — any error here returns to the monitor loop
                     # instead of killing the worker.
                     try:
+                        # Capture cart count BEFORE clicking. This lets
+                        # verify_atc_success detect a positive N → N+1 increment
+                        # even when the retailer hides its success modal.
+                        pre_cart_count = None
+                        if btn_type != "waitlist":
+                            try:
+                                pre_cart_count = await sites.get_cart_count(page, site)
+                            except Exception:
+                                pre_cart_count = None
+
                         ok = await sites.add_to_cart(page, site, self.logger_for(name), btn=btn, btn_type=btn_type)
                         if not ok:
                             atc_retries += 1
@@ -307,17 +317,20 @@ class MonitorEngine:
                             polls_since_reload = reload_every  # force reload next loop
                             continue
 
-                        # Post-click verification: retailer may silently reject with an error modal
-                        # (bot detection, stock race, rate limit). If so, treat as a retry.
+                        # Post-click verification: require a POSITIVE success
+                        # signal (success modal OR cart-count increment) before
+                        # declaring success. Missing modal + unchanged cart = retry.
                         if btn_type != "waitlist":
-                            verified = await sites.verify_atc_success(page, site, self.logger_for(name))
+                            verified = await sites.verify_atc_success(
+                                page, site, self.logger_for(name), pre_cart_count=pre_cart_count
+                            )
                             if not verified:
                                 atc_retries += 1
                                 if atc_max_retries and atc_retries >= atc_max_retries:
-                                    await db.set_watch_status(watch_id, "ERROR", f"Cart rejected {atc_retries}x — giving up")
+                                    await db.set_watch_status(watch_id, "ERROR", f"Cart unconfirmed {atc_retries}x — giving up")
                                     return
-                                await db.set_watch_status(watch_id, "WATCHING", f"Cart rejected, retry #{atc_retries}")
-                                self.log("WARN", f"[{name}] server rejected cart add, retry #{atc_retries}")
+                                await db.set_watch_status(watch_id, "WATCHING", f"Cart unconfirmed, retry #{atc_retries}")
+                                self.log("WARN", f"[{name}] ATC not confirmed (no success signal / cart didn't increment), retry #{atc_retries}")
                                 try:
                                     await page.goto(url, wait_until="domcontentloaded", timeout=15000)
                                 except Exception:
@@ -540,7 +553,21 @@ class MonitorEngine:
                     btn, btn_type = await sites.detect_in_stock(page, drop["site"], ["cart", "preorder"])
                     if btn:
                         self.log("SUCCESS", f"[DROP:{name}] {sites.BUTTON_LABELS.get(btn_type, btn_type)} ({u})")
-                        await sites.add_to_cart(page, drop["site"], self.logger_for(f"DROP:{name}"), btn=btn, btn_type=btn_type)
+                        # Capture cart count pre-click for positive-confirmation.
+                        try:
+                            pre_cart_count = await sites.get_cart_count(page, drop["site"])
+                        except Exception:
+                            pre_cart_count = None
+                        clicked = await sites.add_to_cart(page, drop["site"], self.logger_for(f"DROP:{name}"), btn=btn, btn_type=btn_type)
+                        if not clicked:
+                            await asyncio.sleep(0.4); continue
+                        verified = await sites.verify_atc_success(
+                            page, drop["site"], self.logger_for(f"DROP:{name}"), pre_cart_count=pre_cart_count
+                        )
+                        if not verified:
+                            # False positive — item was OOS or rejected. Keep hammering.
+                            await asyncio.sleep(0.4)
+                            continue
                         await sites.goto_cart(page, drop["site"])
                         if mode in ("checkout", "auto"):
                             await sites.click_checkout(page, drop["site"], self.logger_for(f"DROP:{name}"))
