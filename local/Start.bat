@@ -35,15 +35,11 @@ if not exist "ms-playwright\" (
 rem ----- Decide whether to rebuild the frontend -----
 set REBUILD=0
 if not exist "frontend\build\index.html" set REBUILD=1
-rem If any src file is newer than the built bundle, rebuild
+
 if "%REBUILD%"=="0" (
-    for /f "delims=" %%f in ('dir /s /b /o:-d "frontend\src\*" 2^>nul') do (
-        for %%g in ("frontend\build\index.html") do (
-            if "%%~tf" gtr "%%~tg" set REBUILD=1
-        )
-        goto _checkdone
-    )
-    :_checkdone
+    rem PowerShell one-liner: exit code 1 if any src file is newer than the built bundle
+    powershell -NoProfile -Command "$b=(Get-Item 'frontend\build\index.html').LastWriteTime; $s=(Get-ChildItem 'frontend\src' -Recurse -File | Sort-Object LastWriteTime -Descending | Select-Object -First 1).LastWriteTime; if ($s -gt $b) { exit 1 } else { exit 0 }"
+    if errorlevel 1 set REBUILD=1
 )
 
 if "%REBUILD%"=="1" goto do_build
