@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { api } from "@/lib/api";
 import { toast } from "sonner";
-import { Plug, Unplug, Power, PowerOff, Rocket } from "lucide-react";
+import { Plug, Unplug, Power, PowerOff, Rocket, Chrome } from "lucide-react";
 
 function LogoMark() {
   const [failed, setFailed] = useState(false);
@@ -56,6 +56,22 @@ export default function Header({ status, refresh }) {
     refresh();
   };
 
+  const launchBrave = async () => {
+    try {
+      const r = await api.post("/brave/launch");
+      toast.success("Brave launched — log in to retailers, then Connect");
+      // Auto-connect 3s after launch so CDP has time to come up
+      setTimeout(async () => {
+        try {
+          const c = await api.post("/brave/connect", { cdp_url: cdp });
+          if (c.data.connected) { toast.success("Brave connected"); refresh(); }
+        } catch {}
+      }, 3000);
+    } catch (e) {
+      toast.error(String(e.response?.data?.detail || e.message));
+    }
+  };
+
   const connected = status?.connected;
   const running = status?.running;
 
@@ -85,6 +101,14 @@ export default function Header({ status, refresh }) {
             className="bg-[#121214] border border-[#27272a] text-xs font-mono px-2 py-1.5 w-56 focus:outline-none focus:border-[#FF6B00] rounded-none"
             placeholder="http://127.0.0.1:9222"
           />
+          <button
+            onClick={launchBrave}
+            data-testid="brave-launch-btn"
+            title="Launch Brave with --remote-debugging-port=9222 and auto-connect"
+            className="flex items-center gap-2 px-3 py-1.5 text-xs font-bold uppercase tracking-wider border border-[#A1A1AA] text-[#A1A1AA] hover:bg-white/5 hover:text-white hover:border-white rounded-none"
+          >
+            <Chrome size={14}/> Open Brave
+          </button>
           {connected ? (
             <button onClick={disconnect} data-testid="brave-disconnect-btn"
               className="flex items-center gap-2 px-3 py-1.5 text-xs font-bold uppercase tracking-wider border border-[#FF6B00] bg-[#FF6B00]/10 text-[#FF6B00] hover:bg-[#FF6B00]/20 rounded-none">
@@ -93,7 +117,7 @@ export default function Header({ status, refresh }) {
           ) : (
             <button onClick={connect} data-testid="brave-connect-btn"
               className="flex items-center gap-2 px-3 py-1.5 text-xs font-bold uppercase tracking-wider border border-[#FF6B00] text-[#FF6B00] hover:bg-[#FF6B00]/10 rounded-none">
-              <Plug size={14}/> Connect Brave
+              <Plug size={14}/> Connect
             </button>
           )}
         </div>

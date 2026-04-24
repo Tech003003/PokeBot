@@ -228,37 +228,42 @@ _ATC_ERROR_CLOSE = [
 ]
 
 
-async def verify_atc_success(page, site: str, logger, wait_s: float = 0.9) -> bool:
-    """Wait briefly for an error modal/banner. Return False if one is detected,
-    True if the click looks successful. Closes the modal on the way out."""
-    await asyncio.sleep(wait_s)
+async def verify_atc_success(page, site: str, logger, wait_s: float = 2.5) -> bool:
+    """Wait for an error modal/banner to appear after an ATC click. Returns False
+    if rejected, True if the click looks successful. Closes the modal on the way
+    out so the next poll gets a clean page."""
     sigs = _ATC_ERROR_SIGNATURES.get(site, [])
     if not sigs:
+        await asyncio.sleep(0.5)
         return True
+
+    # Build a single regex that matches any of this site's rejection phrases
+    import re
+    pattern = "|".join(re.escape(s) for s in sigs)
     try:
-        body = await page.inner_text("body", timeout=2000)
+        error_el = page.get_by_text(re.compile(pattern, re.IGNORECASE)).first
+        # Wait up to wait_s for the modal to render
+        if await error_el.is_visible(timeout=int(wait_s * 1000)):
+            matched = ""
+            try:
+                matched = (await error_el.text_content(timeout=500)) or ""
+            except Exception:
+                pass
+            logger("WARN", f"[{SITE_LABELS.get(site, site.upper())}] cart rejected: '{matched[:60]}'")
+            # Best-effort close the modal so the next poll can retry
+            for sel in _ATC_ERROR_CLOSE:
+                try:
+                    el = page.locator(sel).first
+                    if await el.is_visible(timeout=400):
+                        await el.click(timeout=1500)
+                        await asyncio.sleep(0.3)
+                        break
+                except Exception:
+                    continue
+            return False
     except Exception:
-        return True
-    low = body.lower()
-    matched = None
-    for sig in sigs:
-        if sig.lower() in low:
-            matched = sig
-            break
-    if not matched:
-        return True
-    logger("WARN", f"[{SITE_LABELS.get(site, site.upper())}] cart rejected: '{matched}'")
-    # Best-effort close the modal so the next poll can retry
-    for sel in _ATC_ERROR_CLOSE:
-        try:
-            el = page.locator(sel).first
-            if await el.is_visible(timeout=400):
-                await el.click(timeout=1500)
-                await asyncio.sleep(0.3)
-                break
-        except Exception:
-            continue
-    return False
+        pass
+    return True
 
 # Checkout / place-order selectors per site (best-effort; retailers change these frequently)
 _CHECKOUT_BTN = {

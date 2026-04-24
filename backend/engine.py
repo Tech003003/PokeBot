@@ -79,7 +79,6 @@ class MonitorEngine:
             self.log(level, f"{name}: {msg}")
         return _inner
 
-    # ------- Brave CDP connection -------
     async def connect_brave(self, cdp_url: Optional[str] = None) -> dict:
         async with self._connect_lock:
             url = cdp_url or await db.get_setting("cdp_url")

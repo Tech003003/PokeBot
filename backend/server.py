@@ -4,6 +4,10 @@ import asyncio
 import json
 import logging
 import os
+import platform
+import shutil
+import subprocess
+import sys
 from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Optional
@@ -187,6 +191,51 @@ async def brave_connect(body: ConnectIn):
 @api.post("/brave/disconnect")
 async def brave_disconnect():
     return await engine.disconnect_brave()
+
+
+@api.post("/brave/launch")
+async def brave_launch():
+    """Launch Brave with --remote-debugging-port=9222 locally. Only works when
+    TechBot is running on the user's own PC (obviously)."""
+    if platform.system() != "Windows":
+        # Best-effort for non-Windows dev/testing
+        exe_candidates = [
+            "brave", "brave-browser",
+            "/Applications/Brave Browser.app/Contents/MacOS/Brave Browser",
+        ]
+    else:
+        exe_candidates = [
+            r"C:\Program Files\BraveSoftware\Brave-Browser\Application\brave.exe",
+            r"C:\Program Files (x86)\BraveSoftware\Brave-Browser\Application\brave.exe",
+            os.path.expandvars(r"%LOCALAPPDATA%\BraveSoftware\Brave-Browser\Application\brave.exe"),
+        ]
+    brave_exe = next((p for p in exe_candidates if p and (shutil.which(p) or os.path.isfile(p))), None)
+    if not brave_exe:
+        raise HTTPException(404, "brave.exe not found at default install locations")
+
+    # Dedicated profile folder so we don't touch the user's main Brave data
+    profile_dir = os.path.join(os.path.expanduser("~"), "TechBotBraveSession")
+    os.makedirs(profile_dir, exist_ok=True)
+
+    args = [
+        brave_exe,
+        "--remote-debugging-port=9222",
+        f"--user-data-dir={profile_dir}",
+    ]
+    try:
+        kwargs = {"stdout": subprocess.DEVNULL, "stderr": subprocess.DEVNULL,
+                  "stdin": subprocess.DEVNULL, "close_fds": True}
+        if platform.system() == "Windows":
+            DETACHED = 0x00000008  # DETACHED_PROCESS
+            CREATE_NEW_GROUP = 0x00000200
+            kwargs["creationflags"] = DETACHED | CREATE_NEW_GROUP
+        else:
+            kwargs["start_new_session"] = True
+        subprocess.Popen(args, **kwargs)
+        return {"ok": True, "brave_exe": brave_exe, "profile_dir": profile_dir,
+                "message": "Brave launched with debug port 9222. Log into retailers inside it, then click Connect Brave."}
+    except Exception as e:
+        raise HTTPException(500, f"Failed to launch Brave: {str(e)[:200]}")
 
 
 # ------ Watchlist ------
