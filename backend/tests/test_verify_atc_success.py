@@ -132,14 +132,42 @@ def test_error_banner_short_circuits_to_failure():
     assert any("rejected" in m.lower() for _, m in lg.logs)
 
 
-def test_badge_appears_from_hidden_to_one():
-    """Empty-cart case: badge wasn't rendered pre-click (pre_count=None), now shows '1'."""
+def test_badge_from_none_pre_click_requires_modal():
+    """Conservative behaviour: if the cart-count badge was unreadable pre-click
+    (could be empty cart OR just a slow render), we do NOT trust a post-click
+    number by itself — the user might already have had items in their cart and
+    the badge stayed flat. Only a success modal confirms in that case.
+    Regression guard for the 'pre-order says Purchased but site shows error' bug.
+    """
     page = FakePage(elements={
+        # Post-click badge reads '1', but pre was None → must NOT auto-confirm.
         "#nav-cart-count": {"text": "1", "visible": True},
     })
     lg = _logger()
-    ok = asyncio.run(sites.verify_atc_success(page, "amazon", lg, pre_cart_count=None, wait_s=1.0))
-    assert ok is True
+    ok = asyncio.run(sites.verify_atc_success(page, "amazon", lg, pre_cart_count=None, wait_s=0.8))
+    assert ok is False
+
+
+def test_preorder_with_error_banner_does_not_false_confirm():
+    """Exact user-reported scenario: pre-order click, retailer shows
+    'Item not added to cart' modal, no retailer-specific success modal is
+    visible. Previously the broad `div:has-text('Added to Cart')` selector
+    matched unrelated page chrome and returned True. Must return False now.
+    """
+    page = FakePage(
+        elements={
+            # Page has stray text-matching divs (footer links, related widgets).
+            # If our success-selector list has no generic has-text fallbacks,
+            # these are NOT treated as success signals.
+        },
+        text_nodes=[
+            {"text": "Item not added to cart", "visible": True},
+        ],
+    )
+    lg = _logger()
+    ok = asyncio.run(sites.verify_atc_success(page, "target", lg, pre_cart_count=2, wait_s=1.5))
+    assert ok is False
+    assert any("rejected" in m.lower() for _, m in lg.logs)
 
 
 def test_get_cart_count_returns_none_when_badge_hidden():

@@ -173,6 +173,7 @@ class MonitorEngine:
         atc_max_retries = int(settings.get("atc_max_retries", 0))  # 0 = unlimited
 
         page = None
+        keep_page_open = False  # set True on successful purchase so the user sees the result
         try:
             page = await self._new_page()
             self.log("INFO", f"[{sites.SITE_LABELS.get(site, site)}] Monitoring: {name}")
@@ -349,6 +350,7 @@ class MonitorEngine:
                                 "watch_id": watch_id, "name": name, "site": site, "url": url,
                                 "outcome": "WAITLISTED", "price": live_price, "message": "Notify-me signup clicked",
                             })
+                            keep_page_open = True
                             return
 
                         if mode in ("cart", "checkout", "auto"):
@@ -361,6 +363,7 @@ class MonitorEngine:
                                 "outcome": "IN_CART", "price": live_price, "message": "Item added to cart",
                             })
                             await self._notify("IN CART", f"{name} — complete checkout in Brave", color=0x007AFF)
+                            keep_page_open = True
                             return
 
                         # Proceed to checkout
@@ -375,6 +378,7 @@ class MonitorEngine:
                                 "outcome": "CHECKOUT_READY", "message": "Auto-filled, stopped before Place Order",
                             })
                             await self._notify("READY TO CONFIRM", f"{name} — click Place Order in Brave", color=0xFFCC00)
+                            keep_page_open = True
                             return
 
                         if mode == "auto":
@@ -385,6 +389,7 @@ class MonitorEngine:
                                     "outcome": "CHECKOUT_READY", "message": "Global safety held final click",
                                 })
                                 await self._notify("READY TO CONFIRM", f"{name} — place order disabled by safety", color=0xFFCC00)
+                                keep_page_open = True
                                 return
                             placed = await sites.click_place_order(page, site, self.logger_for(name))
                             outcome = "PURCHASED" if placed else "FAILED"
@@ -399,6 +404,7 @@ class MonitorEngine:
                                 f"{name}", color=0x00FF66 if placed else 0xFF3B30,
                             )
                             if placed:
+                                keep_page_open = True
                                 return
                             # else fall through to except/continue-style retry
                             atc_retries += 1
@@ -433,7 +439,7 @@ class MonitorEngine:
             self.log("ERROR", f"[{name}] fatal: {str(e)[:140]}")
         finally:
             try:
-                if page:
+                if page and not keep_page_open:
                     await page.close()
             except Exception:
                 pass
@@ -538,6 +544,7 @@ class MonitorEngine:
             except Exception as e:
                 self.log("ERROR", f"[DROP:{name}] page err: {str(e)[:80]}"); return
             end_at = datetime.now(timezone.utc).timestamp() + duration_s
+            drop_hit = False
             try:
                 while datetime.now(timezone.utc).timestamp() < end_at:
                     try:
@@ -588,11 +595,15 @@ class MonitorEngine:
                             "outcome": "DROP_HIT", "message": f"mode={mode}",
                         })
                         await self._notify("DROP HIT", f"{name}\n{u}", color=0x00FF66)
+                        drop_hit = True
                         return
                     await asyncio.sleep(0.4 + random.random() * 0.3)
             finally:
-                try: await page.close()
-                except Exception: pass
+                # Leave the page open for the user to verify / finish checkout
+                # when a drop was hit. Only auto-close on timeout/failure.
+                if not drop_hit:
+                    try: await page.close()
+                    except Exception: pass
 
         await db.update_drop(drop_id, {"status": "RUNNING"})
         if blast:

@@ -317,48 +317,57 @@ _CART_COUNT_SELECTORS = {
 # Positive success indicators per retailer (sidecart, flyout, success toast).
 # Presence of ANY of these after a click is treated as confirmed ATC success,
 # independent of the cart-count check.
+#
+# CRITICAL: keep every entry to a retailer-specific id / data-test attribute.
+# Do NOT add generic `div:has-text('Added to Cart')` fallbacks — the string
+# "Added to Cart" appears in footer links, suggestion widgets and ARIA labels
+# on many retailers and produces false-positive purchase confirmations even
+# when the retailer silently rejected the click (see pre-order regression).
 _ATC_SUCCESS_SELECTORS = {
     "walmart": [
         "div[data-testid='atc-sidebar']",
         "div[aria-label='Added to cart']",
         "[data-automation-id='atc-confirmation']",
+        "[data-testid='add-to-cart-confirmation']",
     ],
     "pokemoncenter": [
         "[data-testid='added-to-cart-modal']",
         "[data-testid='cart-notification']",
-        "div[role='status']:has-text('added to your cart')",
+        "[data-testid='minicart-flyout'][aria-hidden='false']",
     ],
     "amazon": [
         "#huc-v2-order-row-confirm-text",
         "#attachSiNoCoverage",
         "#NATC_SMART_WAGON_CONF_MSG_SUCCESS",
-        "div:has-text('Added to Cart')",
+        "#sw-atc-confirmation",
     ],
     "target": [
         "div[aria-label='Added to cart']",
         "[data-test='addedToCartModal']",
-        "div[role='dialog']:has-text('Added to cart')",
+        "[data-test='orderPickupPreferredStoreButton']",  # sidesheet after ATC
     ],
     "bestbuy": [
         ".added-to-cart-notification",
-        "div[role='status']:has-text('Added to cart')",
-        ".cart-flyout",
+        ".cart-flyout.is-active",
+        "#cart-flyout-panel[aria-hidden='false']",
     ],
     "gamestop": [
-        ".add-to-cart-messages:has-text('added to your cart')",
-        ".minicart-flyout:visible",
+        ".minicart-flyout.open",
+        ".minicart-flyout[aria-hidden='false']",
+        ".add-to-cart-messages .alert-success",
     ],
     "costco": [
         "#added-to-cart-modal",
-        "div.modal-content:has-text('Added to Your Cart')",
+        "#AddedToCartModal",
+        ".modal.added-to-cart.in",
     ],
     "samsclub": [
         "[data-testid='added-to-cart-modal']",
-        "div[role='dialog']:has-text('Added to cart')",
+        "[data-testid='cart-modal'][aria-hidden='false']",
     ],
     "tcgplayer": [
-        ".cart-flyout:visible",
-        "div:has-text('Added to Cart')",
+        ".cart-flyout.is-open",
+        ".modal-cart-added.is-visible",
     ],
 }
 
@@ -447,16 +456,14 @@ async def verify_atc_success(page, site: str, logger, pre_cart_count: Optional[i
                 continue
 
         # (3) Positive: header cart-count badge incremented.
+        # We ONLY trust this signal when we have a known pre-click baseline.
+        # If pre_cart_count was unreadable, the badge could already have been
+        # non-zero before the click (pre-existing cart items), and a flat
+        # post-click count would false-confirm. In that case, require a modal.
         try:
-            cur = await get_cart_count(page, site)
-            if cur is not None:
-                if pre_cart_count is None:
-                    # Badge wasn't visible pre-click (likely empty cart) but now
-                    # shows a count >= 1 — treat as success.
-                    if cur >= 1:
-                        logger("SUCCESS", f"[{label}] ATC confirmed: cart badge now {cur}")
-                        return True
-                elif cur > pre_cart_count:
+            if pre_cart_count is not None:
+                cur = await get_cart_count(page, site)
+                if cur is not None and cur > pre_cart_count:
                     logger("SUCCESS", f"[{label}] ATC confirmed: cart {pre_cart_count} → {cur}")
                     return True
         except Exception:
