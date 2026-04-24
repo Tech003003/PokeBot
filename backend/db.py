@@ -103,7 +103,11 @@ async def init_db():
         try:
             await db.execute("ALTER TABLE watchlist ADD COLUMN button_types TEXT NOT NULL DEFAULT '[\"cart\"]'")
         except Exception:
-            pass  # already exists
+            pass
+        try:
+            await db.execute("ALTER TABLE drops ADD COLUMN duration_min INTEGER NOT NULL DEFAULT 15")
+        except Exception:
+            pass
         await db.commit()
         for k, v in DEFAULT_SETTINGS.items():
             await db.execute(

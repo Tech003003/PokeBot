@@ -492,13 +492,14 @@ class MonitorEngine:
         blast = bool(drop.get("blast_mode"))
         profile = await db.get_profile(drop["profile_id"]) if drop.get("profile_id") else None
         mode = drop["purchase_mode"] or "cart"
+        duration_s = int(drop.get("duration_min") or 15) * 60
 
         async def hammer(u: str):
             try:
                 page = await self._new_page()
             except Exception as e:
                 self.log("ERROR", f"[DROP:{name}] page err: {str(e)[:80]}"); return
-            end_at = datetime.now(timezone.utc).timestamp() + 900  # 15 min window
+            end_at = datetime.now(timezone.utc).timestamp() + duration_s
             try:
                 while datetime.now(timezone.utc).timestamp() < end_at:
                     try:

@@ -102,6 +102,7 @@ class DropIn(BaseModel):
     blast_mode: bool = True
     purchase_mode: str = "cart"
     profile_id: Optional[str] = None
+    duration_min: int = 15
 
 
 class SettingsPatch(BaseModel):

@@ -41,7 +41,7 @@ export default function Drops({ sites, profiles }) {
               <div className="flex-1 min-w-[200px]">
                 <div className="font-bold text-white">{d.name}</div>
                 <div className="text-[10px] text-[#52525B] font-mono">
-                  [{sites?.labels?.[d.site] || d.site}] · {new Date(d.run_at).toLocaleString()} · {d.urls.length} URL(s) · {MODES.find((m) => m.id === d.purchase_mode)?.label}
+                  [{sites?.labels?.[d.site] || d.site}] · {new Date(d.run_at).toLocaleString()} · {d.urls.length} URL(s) · {MODES.find((m) => m.id === d.purchase_mode)?.label} · run {d.duration_min ?? 15}min
                 </div>
               </div>
               <Countdown target={d.run_at} />
@@ -75,6 +75,7 @@ function DropModal({ item, sites, profiles, onClose }) {
     blast_mode: item.blast_mode ?? true,
     purchase_mode: item.purchase_mode || "cart",
     profile_id: item.profile_id || "",
+    duration_min: item.duration_min ?? 15,
   });
   const save = async () => {
     const urls = f.urls_text.split(/\n+/).map((s) => s.trim()).filter(Boolean);
@@ -85,6 +86,7 @@ function DropModal({ item, sites, profiles, onClose }) {
         name: f.name, site: f.site, run_at: runAtISO, urls,
         queue_handling: !!f.queue_handling, blast_mode: !!f.blast_mode,
         purchase_mode: f.purchase_mode, profile_id: f.profile_id || null,
+        duration_min: Number(f.duration_min) || 15,
       });
       toast.success("Drop scheduled"); onClose();
     } catch (e) { toast.error(String(e.response?.data?.detail || e.message)); }
@@ -111,6 +113,9 @@ function DropModal({ item, sites, profiles, onClose }) {
             <select className={field} value={f.purchase_mode} onChange={(e) => setF({ ...f, purchase_mode: e.target.value })}>
               {MODES.map((m) => <option key={m.id} value={m.id}>{m.label}</option>)}
             </select>
+          </label>
+          <label><div className="text-[10px] text-[#A1A1AA] uppercase mb-1">Duration (min)</div>
+            <input data-testid="drop-duration-input" type="number" min={1} max={720} className={field} value={f.duration_min} onChange={(e) => setF({ ...f, duration_min: e.target.value })} />
           </label>
           <label><div className="text-[10px] text-[#A1A1AA] uppercase mb-1">Profile</div>
             <select className={field} value={f.profile_id} onChange={(e) => setF({ ...f, profile_id: e.target.value })}>
