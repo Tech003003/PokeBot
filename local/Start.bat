@@ -12,25 +12,29 @@ echo ==========================================
 echo.
 
 echo [1/5] Checking Python...
-python --version >nul 2>&1 || goto no_python
+python --version >nul 2>&1
+if errorlevel 1 goto no_python
 
 echo [2/5] Checking Node.js...
-node --version >nul 2>&1 || goto no_node
+node --version >nul 2>&1
+if errorlevel 1 goto no_node
 
-if not exist ".venv\" python -m venv .venv
+if not exist .venv\Scripts\activate.bat python -m venv .venv
 call .venv\Scripts\activate.bat
 
 echo [3/5] Installing/updating Python deps...
 python -m pip install --upgrade pip >nul
-pip install -r backend\requirements.txt || goto pip_fail
+pip install -r backend\requirements.txt
+if errorlevel 1 goto pip_fail
 
-if not exist "ms-playwright\" (
-    echo        Installing Playwright Chromium driver (first run only)...
-    python -m playwright install chromium
-)
+if not exist ms-playwright\chromium-* goto install_pw
+goto pw_done
+:install_pw
+echo        Installing Playwright Chromium driver (first run only)...
+python -m playwright install chromium
+:pw_done
 
-rem ----- Decide whether to rebuild the frontend -----
-if not exist "frontend\build\index.html" goto do_build
+if not exist frontend\build\index.html goto do_build
 powershell -NoProfile -ExecutionPolicy Bypass -File "local\check_rebuild.ps1"
 if errorlevel 1 goto do_build
 echo [4/5] Frontend build up to date, skipping rebuild.
@@ -38,11 +42,15 @@ goto run
 
 :do_build
 echo [4/5] Building frontend (first run or source changed, takes a few minutes)...
-where yarn >nul 2>&1 || call corepack enable >nul 2>&1
-where yarn >nul 2>&1 || call npm install -g yarn
+where yarn >nul 2>&1
+if errorlevel 1 call corepack enable >nul 2>&1
+where yarn >nul 2>&1
+if errorlevel 1 call npm install -g yarn
 pushd frontend
-call yarn install || call npm install
-call yarn build || call npm run build
+call yarn install
+if errorlevel 1 call npm install
+call yarn build
+if errorlevel 1 call npm run build
 popd
 
 :run
