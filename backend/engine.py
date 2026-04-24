@@ -461,7 +461,9 @@ class MonitorEngine:
             task.cancel()
             try:
                 await task
-            except Exception:
+            except (asyncio.CancelledError, Exception):
+                # CancelledError is a BaseException in 3.8+ and escapes
+                # `except Exception`; swallow it so the HTTP handler returns 200.
                 pass
         self.workers.pop(watch_id, None)
         await db.set_watch_status(watch_id, "IDLE", "Stopped")
@@ -487,6 +489,10 @@ class MonitorEngine:
         for did in list(self.drop_tasks.keys()):
             t = self.drop_tasks.pop(did)
             t.cancel()
+            try:
+                await t
+            except (asyncio.CancelledError, Exception):
+                pass
             stopped += 1
         self.running = False
         return {"ok": True, "stopped": stopped}
@@ -610,6 +616,10 @@ class MonitorEngine:
         t = self.drop_tasks.pop(drop_id, None)
         if t:
             t.cancel()
+            try:
+                await t
+            except (asyncio.CancelledError, Exception):
+                pass
         await db.update_drop(drop_id, {"status": "CANCELLED"})
         return {"ok": True}
 
