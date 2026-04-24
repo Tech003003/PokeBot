@@ -157,6 +157,15 @@ class MonitorEngine:
         site = item["site"]
         url = item["url"]
         mode = item["purchase_mode"] or "monitor"
+        # Per-item allowed button types (defaults to cart only)
+        allowed_types = item.get("button_types")
+        if isinstance(allowed_types, str):
+            try:
+                allowed_types = json.loads(allowed_types)
+            except Exception:
+                allowed_types = ["cart"]
+        if not allowed_types:
+            allowed_types = ["cart"]
         profile = await db.get_profile(item["profile_id"]) if item.get("profile_id") else None
         settings = await db.get_all_settings()
         poll_ms = int(settings.get("poll_interval_ms", 700))
@@ -215,8 +224,8 @@ class MonitorEngine:
                     self.log("SUCCESS", f"[{name}] Queue cleared")
                     continue
 
-                # Stock detection
-                btn = await sites.detect_in_stock(page, site)
+                # Stock detection (per allowed button types)
+                btn, btn_type = await sites.detect_in_stock(page, site, allowed_types)
                 if btn:
                     # Price-drop guard (before any click)
                     live_price = await sites.get_price(page, site)
@@ -243,27 +252,36 @@ class MonitorEngine:
                                                color=0xFFCC00)
                             await asyncio.sleep(cooldown)
                             continue
-                    self.log("SUCCESS", f"[{name}] IN STOCK{f' @ ${live_price:.2f}' if live_price else ''} — executing mode={mode}")
-                    await db.set_watch_status(watch_id, "IN_STOCK", f"In stock{f' @ ${live_price:.2f}' if live_price else ''}")
+                    self.log("SUCCESS", f"[{name}] IN STOCK{f' @ ${live_price:.2f}' if live_price else ''} ({btn_type}) — executing mode={mode}")
+                    await db.set_watch_status(watch_id, "IN_STOCK", f"{sites.BUTTON_LABELS.get(btn_type, btn_type)}{f' @ ${live_price:.2f}' if live_price else ''}")
                     await self._notify(
-                        "IN STOCK", f"**{name}** on {sites.SITE_LABELS.get(site, site)}\n{url}",
-                        color=0x00FF66,
+                        f"{sites.BUTTON_LABELS.get(btn_type, btn_type).upper()} AVAILABLE",
+                        f"**{name}** on {sites.SITE_LABELS.get(site, site)}\n{url}",
+                        color=0x00FF66 if btn_type == "cart" else (0x007AFF if btn_type == "preorder" else 0xFFCC00),
                     )
                     if mode == "monitor":
                         await db.log_history({
                             "watch_id": watch_id, "name": name, "site": site, "url": url,
-                            "outcome": "NOTIFIED", "message": "Monitor-only mode",
+                            "outcome": "NOTIFIED", "message": f"Monitor-only ({btn_type})",
                         })
-                        # Cooldown to avoid notification spam
                         await asyncio.sleep(60)
                         continue
 
-                    # Try to click ATC
-                    ok = await sites.add_to_cart(page, site, self.logger_for(name))
+                    # Try to click the detected button
+                    ok = await sites.add_to_cart(page, site, self.logger_for(name), btn=btn, btn_type=btn_type)
                     if not ok:
-                        await db.set_watch_status(watch_id, "ERROR", "ATC click failed")
+                        await db.set_watch_status(watch_id, "ERROR", f"{btn_type} click failed")
                         await asyncio.sleep(1)
                         continue
+
+                    # Waitlist: clicking just signs up for notification — terminal, no checkout
+                    if btn_type == "waitlist":
+                        await db.set_watch_status(watch_id, "PURCHASED", "Joined waitlist / notify-me")
+                        await db.log_history({
+                            "watch_id": watch_id, "name": name, "site": site, "url": url,
+                            "outcome": "WAITLISTED", "price": live_price, "message": "Notify-me signup clicked",
+                        })
+                        return
 
                     if mode in ("cart", "checkout", "auto"):
                         await sites.goto_cart(page, site)
@@ -447,10 +465,10 @@ class MonitorEngine:
                                     pass
                             await asyncio.sleep(2)
                         continue
-                    btn = await sites.detect_in_stock(page, drop["site"])
+                    btn, btn_type = await sites.detect_in_stock(page, drop["site"], ["cart", "preorder"])
                     if btn:
-                        self.log("SUCCESS", f"[DROP:{name}] STOCK ({u})")
-                        await sites.add_to_cart(page, drop["site"], self.logger_for(f"DROP:{name}"))
+                        self.log("SUCCESS", f"[DROP:{name}] {sites.BUTTON_LABELS.get(btn_type, btn_type)} ({u})")
+                        await sites.add_to_cart(page, drop["site"], self.logger_for(f"DROP:{name}"), btn=btn, btn_type=btn_type)
                         await sites.goto_cart(page, drop["site"])
                         if mode in ("checkout", "auto"):
                             await sites.click_checkout(page, drop["site"], self.logger_for(f"DROP:{name}"))

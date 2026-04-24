@@ -58,6 +58,7 @@ class WatchIn(BaseModel):
     max_price: Optional[float] = None
     quantity: int = 1
     profile_id: Optional[str] = None
+    button_types: list[str] = ["cart"]
 
 
 class WatchPatch(BaseModel):
@@ -70,6 +71,7 @@ class WatchPatch(BaseModel):
     max_price: Optional[float] = None
     quantity: Optional[int] = None
     profile_id: Optional[str] = None
+    button_types: Optional[list[str]] = None
 
 
 class ProfileIn(BaseModel):
@@ -156,7 +158,11 @@ async def meta_sites():
 
 @api.get("/meta/modes")
 async def meta_modes():
-    return {"modes": ["monitor", "cart", "checkout", "auto"]}
+    return {
+        "modes": ["monitor", "cart", "checkout", "auto"],
+        "button_types": sitelib.BUTTON_TYPES,
+        "button_labels": sitelib.BUTTON_LABELS,
+    }
 
 
 # ------ Status ------
@@ -181,26 +187,49 @@ async def brave_disconnect():
 
 
 # ------ Watchlist ------
-@api.get("/watch")
-async def watch_list():
-    return await db.list_watch()
-
-
 @api.post("/watch")
 async def watch_create(body: WatchIn):
     if body.site not in sitelib.SITES:
         raise HTTPException(400, f"Unknown site '{body.site}'")
-    return await db.create_watch(_bool_fix(body.model_dump()))
+    data = _bool_fix(body.model_dump())
+    if isinstance(data.get("button_types"), list):
+        data["button_types"] = json.dumps(data["button_types"])
+    created = await db.create_watch(data)
+    if isinstance(created.get("button_types"), str):
+        try:
+            created["button_types"] = json.loads(created["button_types"])
+        except Exception:
+            pass
+    return created
 
 
 @api.patch("/watch/{wid}")
 async def watch_update(wid: str, body: WatchPatch):
     patch = {k: v for k, v in body.model_dump().items() if v is not None}
     patch = _bool_fix(patch)
+    if isinstance(patch.get("button_types"), list):
+        patch["button_types"] = json.dumps(patch["button_types"])
     item = await db.update_watch(wid, patch)
     if not item:
         raise HTTPException(404, "watch not found")
+    if isinstance(item.get("button_types"), str):
+        try:
+            item["button_types"] = json.loads(item["button_types"])
+        except Exception:
+            pass
     return item
+
+
+@api.get("/watch")
+async def watch_list():
+    rows = await db.list_watch()
+    for r in rows:
+        if isinstance(r.get("button_types"), str):
+            try:
+                r["button_types"] = json.loads(r["button_types"])
+            except Exception:
+                r["button_types"] = ["cart"]
+    return rows
 
 
 @api.delete("/watch/{wid}")

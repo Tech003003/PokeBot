@@ -8,6 +8,7 @@ const OUTCOME_COLOR = {
   PURCHASED: "text-[#00FF66] border-[#00FF66]/30",
   DROP_HIT: "text-[#00FF66] border-[#00FF66]/30",
   PRICE_SKIP: "text-[#FFCC00] border-[#FFCC00]/30",
+  WAITLISTED: "text-[#FFCC00] border-[#FFCC00]/30",
   FAILED: "text-[#FF3B30] border-[#FF3B30]/30",
 };
 

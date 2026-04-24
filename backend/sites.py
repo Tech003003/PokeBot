@@ -26,6 +26,13 @@ SITE_LABELS = {
     "costco": "COST", "samsclub": "SAMS", "tcgplayer": "TCG",
 }
 
+BUTTON_TYPES = ["cart", "preorder", "waitlist"]
+BUTTON_LABELS = {
+    "cart": "Add to Cart",
+    "preorder": "Pre-Order",
+    "waitlist": "Waitlist / Notify Me",
+}
+
 _CART_URLS = {
     "walmart": "https://www.walmart.com/cart",
     "pokemoncenter": "https://www.pokemoncenter.com/cart",
@@ -82,6 +89,88 @@ _SELECTORS = {
         "button:has-text('Add to Cart'):not([disabled])",
         "button.btn-add-to-cart:not([disabled])",
     ],
+}
+
+# Pre-order buttons. Retailers often use a distinct CTA for upcoming releases.
+_PREORDER_SELECTORS = {
+    "walmart": [
+        "button[data-automation-id='preorder-button']",
+        "button:has-text('Pre-order'):not([disabled])",
+        "button:has-text('Preorder'):not([disabled])",
+    ],
+    "pokemoncenter": [
+        "button:has-text('Pre-order'):not([disabled])",
+        "button:has-text('Preorder'):not([disabled])",
+    ],
+    "amazon": [
+        "#one-click-button:has-text('Pre-order')",
+        "input[name='submit.preorder']:not([disabled])",
+        "button:has-text('Pre-order'):not([disabled])",
+    ],
+    "target": [
+        "button[data-test='preorderButton']:not([disabled])",
+        "button:has-text('Preorder'):not([disabled])",
+    ],
+    "bestbuy": [
+        "button[data-button-state='PRE_ORDER']:not([disabled])",
+        "button:has-text('Pre-Order'):not([disabled])",
+    ],
+    "gamestop": [
+        "button.pre-order:not([disabled])",
+        "button:has-text('Pre-Order'):not([disabled])",
+    ],
+    "costco": [
+        "button:has-text('Pre-Order'):not([disabled])",
+    ],
+    "samsclub": [
+        "button:has-text('Pre-Order'):not([disabled])",
+    ],
+    "tcgplayer": [
+        "button:has-text('Pre-Order'):not([disabled])",
+    ],
+}
+
+# Waitlist / "Notify me when available" buttons. Clicking these doesn't purchase —
+# it signs you up for a notification. The engine treats these separately.
+_WAITLIST_SELECTORS = {
+    "walmart": [
+        "button:has-text('Notify me'):not([disabled])",
+        "button:has-text('Notify when available'):not([disabled])",
+    ],
+    "pokemoncenter": [
+        "button:has-text('Notify me'):not([disabled])",
+        "button:has-text('Email when available'):not([disabled])",
+    ],
+    "amazon": [
+        "button:has-text('Sign up to be notified'):not([disabled])",
+        "#notify-me-button:not([disabled])",
+    ],
+    "target": [
+        "button[data-test='notifyMeButton']:not([disabled])",
+        "button:has-text('Notify me'):not([disabled])",
+    ],
+    "bestbuy": [
+        "button:has-text('Notify Me'):not([disabled])",
+        "button[data-button-state='COMING_SOON']:not([disabled])",
+    ],
+    "gamestop": [
+        "button:has-text('Notify Me'):not([disabled])",
+    ],
+    "costco": [
+        "button:has-text('Notify Me'):not([disabled])",
+    ],
+    "samsclub": [
+        "button:has-text('Notify Me'):not([disabled])",
+    ],
+    "tcgplayer": [
+        "button:has-text('Notify Me'):not([disabled])",
+    ],
+}
+
+_SELECTOR_GROUPS = {
+    "cart": _SELECTORS,
+    "preorder": _PREORDER_SELECTORS,
+    "waitlist": _WAITLIST_SELECTORS,
 }
 
 _OOS_SIGNATURES = {
@@ -232,21 +321,28 @@ async def is_queue(page, site: str) -> bool:
         return False
 
 
-async def detect_in_stock(page, site: str) -> Optional[object]:
-    """Return a Locator handle if an in-stock add-to-cart button is visible, else None."""
-    selectors = _SELECTORS.get(site, [])
-    for s in selectors:
-        try:
-            btn = page.locator(s).first
-            if await btn.is_visible(timeout=800):
-                return btn
-        except Exception:
+async def detect_in_stock(page, site: str, allowed_types: Optional[list] = None):
+    """Return (Locator, button_type) if a buy-type button is visible for the allowed
+    types, else (None, None). Order of priority: cart → preorder → waitlist."""
+    if not allowed_types:
+        allowed_types = ["cart"]
+    for btype in ("cart", "preorder", "waitlist"):
+        if btype not in allowed_types:
             continue
-    return None
+        selectors = _SELECTOR_GROUPS.get(btype, {}).get(site, [])
+        for s in selectors:
+            try:
+                btn = page.locator(s).first
+                if await btn.is_visible(timeout=600):
+                    return btn, btype
+            except Exception:
+                continue
+    return None, None
 
 
-async def add_to_cart(page, site: str, logger) -> bool:
-    btn = await detect_in_stock(page, site)
+async def add_to_cart(page, site: str, logger, btn=None, btn_type: str = "cart") -> bool:
+    if btn is None:
+        btn, btn_type = await detect_in_stock(page, site, ["cart", "preorder", "waitlist"])
     if not btn:
         return False
     try:
@@ -255,11 +351,12 @@ async def add_to_cart(page, site: str, logger) -> bool:
         pass
     try:
         await btn.click(timeout=3000)
-        logger("SUCCESS", f"[{SITE_LABELS.get(site, site.upper())}] Add-to-cart clicked")
+        label = BUTTON_LABELS.get(btn_type, btn_type)
+        logger("SUCCESS", f"[{SITE_LABELS.get(site, site.upper())}] {label} clicked")
         await asyncio.sleep(random.uniform(0.6, 1.2))
         return True
     except Exception as e:
-        logger("WARN", f"[{SITE_LABELS.get(site, site.upper())}] ATC click failed: {str(e)[:80]}")
+        logger("WARN", f"[{SITE_LABELS.get(site, site.upper())}] button click failed: {str(e)[:80]}")
         return False
 
 

@@ -30,6 +30,7 @@ CREATE TABLE IF NOT EXISTS watchlist (
     max_price REAL,
     quantity INTEGER NOT NULL DEFAULT 1,
     profile_id TEXT,
+    button_types TEXT NOT NULL DEFAULT '["cart"]',
     status TEXT NOT NULL DEFAULT 'IDLE',
     last_checked TEXT,
     last_message TEXT,
@@ -96,6 +97,11 @@ DEFAULT_SETTINGS = {
 async def init_db():
     async with aiosqlite.connect(DB_PATH) as db:
         await db.executescript(SCHEMA)
+        # Migration: add button_types column to pre-existing DBs
+        try:
+            await db.execute("ALTER TABLE watchlist ADD COLUMN button_types TEXT NOT NULL DEFAULT '[\"cart\"]'")
+        except Exception:
+            pass  # already exists
         await db.commit()
         for k, v in DEFAULT_SETTINGS.items():
             await db.execute(

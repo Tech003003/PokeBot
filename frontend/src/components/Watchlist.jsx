@@ -61,7 +61,18 @@ export default function Watchlist({ sites, profiles, onChange }) {
                     [ {sites?.labels?.[it.site] || it.site.toUpperCase()} ]
                   </span>
                 </td>
-                <td className="p-3 text-xs text-[#A1A1AA]">{MODES.find((m) => m.id === it.purchase_mode)?.label || it.purchase_mode}</td>
+                <td className="p-3 text-xs text-[#A1A1AA]">
+                  <div>{MODES.find((m) => m.id === it.purchase_mode)?.label || it.purchase_mode}</div>
+                  <div className="flex gap-1 mt-1 flex-wrap">
+                    {(Array.isArray(it.button_types) ? it.button_types : ["cart"]).map((b) => (
+                      <span key={b} className={`text-[9px] px-1 py-px border tracking-wider uppercase ${
+                        b === "cart" ? "text-[#00FF66] border-[#00FF66]/30" :
+                        b === "preorder" ? "text-[#007AFF] border-[#007AFF]/30" :
+                        "text-[#FFCC00] border-[#FFCC00]/30"
+                      }`}>{b === "cart" ? "ATC" : b === "preorder" ? "PRE" : "WAIT"}</span>
+                    ))}
+                  </div>
+                </td>
                 <td className="p-3">
                   <span className={`inline-flex items-center gap-1.5 px-2 py-0.5 text-[10px] font-black uppercase tracking-wider border ${STATUS_COLORS[it.status] || STATUS_COLORS.IDLE}`}>
                     {it.status === "IN_STOCK" && <span className="w-1.5 h-1.5 rounded-full bg-[#00FF66] animate-pulse" />}
@@ -88,6 +99,12 @@ export default function Watchlist({ sites, profiles, onChange }) {
   );
 }
 
+const BUTTON_TYPE_LABELS = {
+  cart: "Add to Cart",
+  preorder: "Pre-Order",
+  waitlist: "Waitlist / Notify Me",
+};
+
 function WatchModal({ item, sites, profiles, onClose }) {
   const [f, setF] = useState({
     name: item.name || "",
@@ -99,10 +116,25 @@ function WatchModal({ item, sites, profiles, onClose }) {
     max_price: item.max_price ?? "",
     quantity: item.quantity ?? 1,
     profile_id: item.profile_id || "",
+    button_types: Array.isArray(item.button_types) && item.button_types.length ? item.button_types : ["cart"],
   });
+  const toggleBtype = (b) => {
+    const has = f.button_types.includes(b);
+    let next = has ? f.button_types.filter((x) => x !== b) : [...f.button_types, b];
+    if (next.length === 0) next = ["cart"]; // never allow empty
+    setF({ ...f, button_types: next });
+  };
   const save = async () => {
     try {
-      const body = { ...f, max_price: f.max_price === "" ? null : Number(f.max_price), quantity: Number(f.quantity), priority: Number(f.priority), active: Boolean(f.active), profile_id: f.profile_id || null };
+      const body = {
+        ...f,
+        max_price: f.max_price === "" ? null : Number(f.max_price),
+        quantity: Number(f.quantity),
+        priority: Number(f.priority),
+        active: Boolean(f.active),
+        profile_id: f.profile_id || null,
+        button_types: f.button_types,
+      };
       if (item.id) await api.patch(`/watch/${item.id}`, body);
       else await api.post(`/watch`, body);
       toast.success("Saved");
@@ -127,6 +159,36 @@ function WatchModal({ item, sites, profiles, onClose }) {
               {MODES.map((m) => <option key={m.id} value={m.id}>{m.label}</option>)}
             </select>
           </label>
+          <div className="col-span-2">
+            <div className="text-[10px] text-[#A1A1AA] uppercase tracking-wider mb-1">Accept button types</div>
+            <div className="flex flex-wrap gap-2" data-testid="watch-btype-group">
+              {Object.entries(BUTTON_TYPE_LABELS).map(([id, label]) => {
+                const on = f.button_types.includes(id);
+                return (
+                  <button
+                    type="button"
+                    key={id}
+                    data-testid={`watch-btype-${id}`}
+                    onClick={() => toggleBtype(id)}
+                    className={`px-3 py-1.5 text-[11px] font-bold uppercase tracking-wider border rounded-none transition-colors ${
+                      on
+                        ? (id === "cart"
+                            ? "bg-[#00FF66]/10 text-[#00FF66] border-[#00FF66]/40"
+                            : id === "preorder"
+                              ? "bg-[#007AFF]/10 text-[#007AFF] border-[#007AFF]/40"
+                              : "bg-[#FFCC00]/10 text-[#FFCC00] border-[#FFCC00]/40")
+                        : "text-[#52525B] border-[#27272a] hover:border-[#3f3f46] hover:text-[#A1A1AA]"
+                    }`}
+                  >
+                    {label}
+                  </button>
+                );
+              })}
+            </div>
+            <div className="text-[10px] text-[#52525B] mt-1 leading-relaxed">
+              Pick every type of button that should trigger this watch. Waitlist/Notify-me just clicks the button and stops — no checkout flow.
+            </div>
+          </div>
           <label><div className="text-[10px] text-[#A1A1AA] uppercase tracking-wider mb-1">Priority (1-10)</div><input className={field} type="number" min={1} max={10} value={f.priority} onChange={(e) => setF({ ...f, priority: e.target.value })} /></label>
           <label><div className="text-[10px] text-[#A1A1AA] uppercase tracking-wider mb-1">Quantity</div><input className={field} type="number" min={1} value={f.quantity} onChange={(e) => setF({ ...f, quantity: e.target.value })} /></label>
           <label><div className="text-[10px] text-[#A1A1AA] uppercase tracking-wider mb-1">Max Price ($)</div><input className={field} type="number" step="0.01" value={f.max_price} onChange={(e) => setF({ ...f, max_price: e.target.value })} /></label>
