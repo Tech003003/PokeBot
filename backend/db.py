@@ -75,7 +75,7 @@ CREATE TABLE IF NOT EXISTS settings (
 """
 
 DEFAULT_SETTINGS = {
-    "poll_interval_ms": 700,
+    "poll_interval_ms": 50,
     "concurrent_workers": 5,
     "jitter_ms": 200,
     "cdp_url": "http://127.0.0.1:9222",
@@ -91,8 +91,15 @@ DEFAULT_SETTINGS = {
     "discord_enabled": False,
     "discord_bot_token": "",
     "discord_channel_rules": {},       # { channel_id: {action, priority, max_price, profile_id, auto_start} }
-    "reload_every_n_polls": 10,        # do a soft reload every N polls (saves full navigations)
+    "reload_every_n_polls": 20,        # do a soft reload every N polls (saves full navigations)
     "atc_max_retries": 0,              # 0 = unlimited retries on ATC click failures
+}
+
+# One-time migration: users who never touched these defaults get the new values
+# (50 ms poll / 20-poll reload). Anyone who customized keeps their override.
+_DEFAULT_MIGRATIONS = {
+    "poll_interval_ms": (700, 50),
+    "reload_every_n_polls": (10, 20),
 }
 
 
@@ -113,6 +120,12 @@ async def init_db():
             await db.execute(
                 "INSERT OR IGNORE INTO settings (k, v) VALUES (?, ?)",
                 (k, json.dumps(v)),
+            )
+        # Bump previous defaults forward for users who never customized them.
+        for k, (old_default, new_default) in _DEFAULT_MIGRATIONS.items():
+            await db.execute(
+                "UPDATE settings SET v=? WHERE k=? AND v=?",
+                (json.dumps(new_default), k, json.dumps(old_default)),
             )
         await db.commit()
 

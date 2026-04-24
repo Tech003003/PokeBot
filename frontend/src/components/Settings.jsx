@@ -47,7 +47,7 @@ export default function Settings() {
         <div className="text-xs font-black tracking-[0.2em] uppercase text-[#A1A1AA] mb-3" style={{fontFamily:"'Chivo', sans-serif"}}>Engine</div>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
           <label><div className="text-[10px] text-[#A1A1AA] uppercase mb-1">Poll Interval (ms)</div>
-            <input type="number" min={100} step={50} className={field} value={s.poll_interval_ms} onChange={(e) => setS({ ...s, poll_interval_ms: Number(e.target.value) })} data-testid="poll-interval-input" />
+            <input type="number" min={25} step={25} className={field} value={s.poll_interval_ms} onChange={(e) => setS({ ...s, poll_interval_ms: Number(e.target.value) })} data-testid="poll-interval-input" />
           </label>
           <label><div className="text-[10px] text-[#A1A1AA] uppercase mb-1">Jitter (ms)</div>
             <input type="number" min={0} className={field} value={s.jitter_ms} onChange={(e) => setS({ ...s, jitter_ms: Number(e.target.value) })} />
@@ -59,7 +59,7 @@ export default function Settings() {
             <input className={field} value={s.cdp_url} onChange={(e) => setS({ ...s, cdp_url: e.target.value })} />
           </label>
           <label title="Do a soft reload every N polls (instead of full navigation every poll). Higher = faster polling, lower = fresher state."><div className="text-[10px] text-[#A1A1AA] uppercase mb-1">Reload Every (polls)</div>
-            <input type="number" min={1} max={200} className={field} value={s.reload_every_n_polls ?? 10} onChange={(e) => setS({ ...s, reload_every_n_polls: Number(e.target.value) })} data-testid="reload-every-input" />
+            <input type="number" min={1} max={200} className={field} value={s.reload_every_n_polls ?? 20} onChange={(e) => setS({ ...s, reload_every_n_polls: Number(e.target.value) })} data-testid="reload-every-input" />
           </label>
           <label title="Max times to retry the Add-to-Cart click before giving up. 0 = never give up."><div className="text-[10px] text-[#A1A1AA] uppercase mb-1">ATC Retry Cap (0 = inf)</div>
             <input type="number" min={0} className={field} value={s.atc_max_retries ?? 0} onChange={(e) => setS({ ...s, atc_max_retries: Number(e.target.value) })} data-testid="atc-retries-input" />

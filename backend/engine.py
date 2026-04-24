@@ -167,9 +167,9 @@ class MonitorEngine:
             allowed_types = ["cart"]
         profile = await db.get_profile(item["profile_id"]) if item.get("profile_id") else None
         settings = await db.get_all_settings()
-        poll_ms = int(settings.get("poll_interval_ms", 700))
+        poll_ms = int(settings.get("poll_interval_ms", 50))
         jitter = int(settings.get("jitter_ms", 200))
-        reload_every = int(settings.get("reload_every_n_polls", 10))
+        reload_every = int(settings.get("reload_every_n_polls", 20))
         atc_max_retries = int(settings.get("atc_max_retries", 0))  # 0 = unlimited
 
         page = None
