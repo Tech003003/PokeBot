@@ -11,8 +11,7 @@ your computer.
 If you just want to run the app without installing Python, Node.js, or anything else:
 
 1. Install **[Brave browser](https://brave.com/download)** (the bot drives your Brave window).
-2. Go to your repo's **Releases** page on GitHub:
-   `https://github.com/<your-username>/<your-repo>/releases/latest`
+2. Go to the "Actions" tab on the repo.
 3. Download **`TechBot-windows.zip`** under **Assets**.
 4. Right-click the ZIP → **Extract All…** → pick anywhere (Desktop is fine).
 5. Open the extracted folder, double-click **`TechBot.exe`**.
