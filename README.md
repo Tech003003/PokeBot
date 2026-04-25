@@ -20,34 +20,27 @@ your computer.
 
 ---
 
-## 🚀 EASIEST INSTALL — download the ready-to-run .exe
+## How to install (two paths)
 
-If you just want to run the app without installing Python, Node.js, or anything else:
+**Path 1 — Build from source (recommended, always works).** Skip to [Section 2](#2-download-the-project-to-your-pc).
+You'll install Python + Node + Brave once, then double-click `Start.bat` from then on.
 
-1. Install **[Brave browser](https://brave.com/download)** (the bot drives your Brave window).
-2. Go to your repo's **Releases** page on GitHub:
-   `https://github.com/<your-username>/<your-repo>/releases/latest`
-3. Download **`TechBot-windows.zip`** under **Assets**.
-4. Right-click the ZIP → **Extract All…** → pick anywhere (Desktop is fine).
-5. Open the extracted folder, double-click **`TechBot.exe`**.
-6. The dashboard opens automatically at **http://127.0.0.1:8787**.
-7. Double-click **`Start-Brave.bat`** (also in the folder) to open Brave with the debug port,
-   log into your retailer accounts once, then click **CONNECT BRAVE** on the dashboard.
+**Path 2 — One-click `.exe` (only if a packaged build exists).** This requires that
+you (or someone with access to the repo) has already pushed a version tag like `v1.0.0`
+on GitHub, which triggers the **Build Windows EXE** Action and attaches a
+`TechBot-windows.zip` to a GitHub **Release**. If your repo's
+`https://github.com/<you>/<repo>/releases` page is empty, this path is not yet available
+to you — go build one first (Repo → **Actions** → **Build Windows EXE** → **Run workflow**;
+or push a `git tag v1.0.0 && git push --tags`). Once a Release exists, the steps are:
 
-That's it. No coding, no Python, no installs beyond Brave.
+1. Install **[Brave browser](https://brave.com/download)**.
+2. Go to your Releases page → download **`TechBot-windows.zip`** under Assets.
+3. Extract anywhere, double-click **`TechBot.exe`** (the dashboard opens at http://127.0.0.1:8787).
+4. Double-click **`Start-Brave.bat`** to open Brave with the debug port, sign into your
+   retailers once, then click **CONNECT BRAVE** on the dashboard.
 
-> **First launch notes:** Windows Defender may flag the .exe once as "Windows protected your
-> PC" — click **More info** → **Run anyway**. This is a normal false-positive for
-> PyInstaller-bundled Python apps. The ZIP is ~250 MB (it includes the Chromium browser
-> driver and the entire Python runtime — you never need to install those yourself).
-
-### Don't see a Release yet?
-
-Someone needs to **tag a version** on the repo to trigger a build. From the repo page on
-GitHub → Releases → **Draft a new release** → create a new tag like `v1.0.0` → publish.
-GitHub's build pipeline automatically produces the .exe ZIP and attaches it to that
-release (takes ~8 minutes). You can also go to the **Actions** tab → **Build Windows EXE**
-→ **Run workflow** to build on-demand without tagging.
+> Windows Defender may flag the unsigned .exe once — click **More info** → **Run anyway**.
+> This is a normal false-positive for PyInstaller-bundled Python apps.
 
 ---
 
@@ -116,7 +109,7 @@ tell at a glance which alerts it picked up.
 
 ## Table of contents
 
-0. [🚀 Easy install — download the .exe](#-easiest-install--download-the-ready-to-run-exe) (start here if you don't code)
+0. [Install paths overview](#how-to-install-two-paths) — start here
 1. [What you're installing](#1-what-youre-installing) *(build-from-source path)*
 2. [Download the project to your PC](#2-download-the-project-to-your-pc)
 3. [Install Python](#3-install-python)
