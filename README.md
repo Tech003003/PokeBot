@@ -1,4 +1,4 @@
-# TechBot Command Center — Complete User Guide (No Coding Required)
+# TechBot Command Center — User Guide
 
 A local Pokémon / hot-item scalper dashboard with optional auto-purchase. Everything
 runs on **your own PC** — your logins, shipping address, and payment info never leave
